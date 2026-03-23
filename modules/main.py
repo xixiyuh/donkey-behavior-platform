@@ -20,6 +20,8 @@ from .streams import open_source
 from .websocket_manager import WSManager
 from .overlays import put_fps
 
+from backend.api import router as farm_router
+
 # 全局检测器实例和锁
 _detector = None
 _detector_lock = threading.Lock()
@@ -70,6 +72,9 @@ app = FastAPI(title="Realtime Detector", version="1.0.0", lifespan=lifespan)
 static_dir = C.BASE_DIR / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# 添加后端路由
+app.include_router(farm_router)
 
 ws_manager = WSManager(max_fps=C.MAX_FPS)
 
@@ -144,7 +149,10 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                     if do_infer:
                         r, dt = det.infer_once(frame)
                         last_fps = 1.0 / dt if dt and dt > 0 else 0.0
-                        frame = det.annotate(frame, r)
+                        # 传递camera_id、pen_id和barn_id参数
+                        frame = det.annotate(frame, r, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
+                                             pen_id=stream.pen_id if hasattr(stream, 'pen_id') else None,
+                                             barn_id=stream.barn_id if hasattr(stream, 'barn_id') else None)
 
                     put_fps(frame, last_fps)
 

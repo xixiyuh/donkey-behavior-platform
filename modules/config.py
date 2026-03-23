@@ -39,3 +39,30 @@ MPV_PIPE_FPS = 15
 COLOR_STANDING = (0, 255, 0)
 COLOR_MATING = (0, 0, 255)
 COLOR_LYING = (255, 0, 0)
+
+# ------- 摄像头FLV地址配置 -------
+# 格式：{barn_id: {pen_id: [camera1_url, camera2_url, camera3_url]}}
+CAMERA_FLV_URLS = {
+    1: {
+        1: [
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_1_2.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_1_3.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_1_4.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1"
+        ],
+        2: [
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_2_2.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_2_3.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_2_4.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1"
+        ],
+        # 可以继续添加更多栏的摄像头地址
+    },
+    2: {
+        1: [
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_16_2.flv?expire=1799376370&id=931137041373081600&t=4d1ff7477c74c407a64011907deb7cb38b612dfe2ec0a2fac020ae851c409a29&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_16_3.flv?expire=1799376370&id=931137041373081600&t=4d1ff7477c74c407a64011907deb7cb38b612dfe2ec0a2fac020ae851c409a29&ev=101&supportH265=1",
+            "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_16_4.flv?expire=1799376370&id=931137041373081600&t=4d1ff7477c74c407a64011907deb7cb38b612dfe2ec0a2fac020ae851c409a29&ev=101&supportH265=1"
+        ],
+        # 可以继续添加更多栏的摄像头地址
+    }
+    # 可以继续添加更多舍的摄像头地址
+}

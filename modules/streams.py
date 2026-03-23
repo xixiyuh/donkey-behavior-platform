@@ -268,15 +268,39 @@ def open_source(kind: str, value: str):
         else:
             value = "0"
 
+    # 提取camera_id、pen_id和barn_id
+    camera_id = None
+    pen_id = None
+    barn_id = None
+    
+    # 从URL中提取信息（这里需要根据实际的URL格式进行调整）
+    # 例如：从配置的FLV地址中查找对应的摄像头信息
+    for b_id, pens in C.CAMERA_FLV_URLS.items():
+        for p_id, urls in pens.items():
+            if value in urls:
+                barn_id = b_id
+                pen_id = p_id
+                camera_id = urls.index(value) + 1
+                break
+        if camera_id:
+            break
+
     if kind == "camera":
-        return CameraStream(value)
+        stream = CameraStream(value)
     elif kind in ("file", "video"):
-        return FileStream(value)
+        stream = FileStream(value)
     elif kind == "rtsp":
-        return RTSPStream(value)
+        stream = RTSPStream(value)
     elif kind == "image":
-        return ImageStream(value)
+        stream = ImageStream(value)
     elif kind in ("mpv", "rtmp", "flv", "hls", "m3u8", "httpflv", "mpvpipe"):
-        return MPVPipeStream(C.MPV_EXE, value, w=C.MPV_PIPE_W, h=C.MPV_PIPE_H, fps=C.MPV_PIPE_FPS)
+        stream = MPVPipeStream(C.MPV_EXE, value, w=C.MPV_PIPE_W, h=C.MPV_PIPE_H, fps=C.MPV_PIPE_FPS)
     else:
         raise ValueError(f"未知的输入源类型: {kind}")
+    
+    # 添加摄像头信息到stream对象
+    stream.camera_id = camera_id
+    stream.pen_id = pen_id
+    stream.barn_id = barn_id
+    
+    return stream
