@@ -1,0 +1,73 @@
+# ===== Common =====
+.DS_Store
+Thumbs.db
+
+# ===== Java / Maven / Gradle =====
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+.gradle/
+.idea/
+*.iml
+out/
+logs/
+*.log
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# ===== Frontend / Node =====
+node_modules/
+dist/
+.cache/
+.next/
+.nuxt/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Env files =====
+.env
+.env.*
+!.env.example
+
+# ===== OS / Editor =====
+.vscode/
+.idea/
+
+# ===== Project Specific =====
+# Model files
+models/
+!models/.gitkeep
+
+# Data files
+data/
+!data/.gitkeep
+
+# Output files
+out/
+!out/.gitkeep
+
+# MPV debug logs
+mpvfile_debug.log
+mpvpipe_debug.log
+
+# Runtime files
+*.rgb

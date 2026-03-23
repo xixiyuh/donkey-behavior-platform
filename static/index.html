@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>RK3588 Realtime Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { 
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      margin: 0; padding: 16px; background: #0b1020; color: #e7e9ee; 
+    }
+    .card { 
+      background: #121833; border: 1px solid #243; border-radius: 14px; 
+      padding: 16px; max-width: 1080px; margin: 0 auto; 
+    }
+    h1 { margin-top: 0; font-size: 20px; color: #60a5fa; }
+    label { font-size: 14px; color: #b9c2d0; display:block; margin: 8px 0 4px; }
+    input, select { 
+      width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #334; 
+      background: #172045; color: #e7e9ee; box-sizing: border-box;
+    }
+    .row { display: grid; grid-template-columns: 1fr 2fr auto; gap: 12px; align-items: end; }
+    .buttons { display: flex; gap: 12px; }
+    button { 
+      cursor: pointer; padding: 10px 14px; border-radius: 10px; 
+      border: 1px solid #345; background: #1d2a5a; color: #e7e9ee; 
+      transition: background 0.2s;
+    }
+    button:hover { background: #26346e; }
+    button:disabled { background: #666; cursor: not-allowed; }
+    #log { 
+      white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
+      background: #0f1533; padding: 10px; border-radius: 10px; height: 120px; 
+      overflow: auto; border: 1px solid #223; font-size: 12px;
+    }
+    .preview { 
+      background: #000; border-radius: 12px; overflow: hidden; 
+      border: 1px solid #243; display: flex; align-items: center; 
+      justify-content: center; min-height: 360px; position: relative;
+    }
+    .preview img { width: 100%; height: auto; display: block; }
+    .status { 
+      position: absolute; top: 10px; right: 10px; 
+      padding: 5px 10px; border-radius: 5px; font-size: 12px;
+    }
+    .status.connected { background: #065f46; color: #d1fae5; }
+    .status.disconnected { background: #7f1d1d; color: #fecaca; }
+    small { color: #94a3b8; font-size: 12px; }
+    .info-panel {
+      background: #1a2332; border-radius: 8px; padding: 10px; margin-top: 10px;
+      border-left: 3px solid #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🚀 RK3588 实时检测系统</h1>
+    
+    <div class="info-panel">
+      <small>
+        <strong>支持输入源：</strong> 摄像头 | 本地视频 | RTSP流 | 静态图片<br>
+        <strong>AI模型：</strong> YOLOv8 + 对比学习交配行为识别<br>
+        <strong>硬件加速：</strong> RK3588 NPU (RKNN Lite2)
+      </small>
+    </div>
+    
+    <div class="row">
+      <div>
+        <label for="kind">输入源类型</label>
+        <select id="kind">
+          <option value="camera">摄像头</option>
+          <option value="rtsp">RTSP 远程摄像头</option>
+          <option value="file">本地视频文件</option>
+          <option value="image">本地图片</option>
+          <option value="mpv">MPV（推荐：RTMP/FLV/HLS）</option>
+        </select>
+      </div>
+      <div>
+        <label for="value">URL / 路径</label>
+        <input id="value" placeholder="留空使用默认配置，或输入自定义路径/URL" />
+        <small>
+          摄像头: 0, 1, 2... | RTSP: rtsp://user:pass@ip:port/path | 
+          文件: /path/to/video.mp4 | 图片: /path/to/image.jpg
+        </small>
+      </div>
+      <div class="buttons">
+        <button id="btnStart">🟢 开始</button>
+        <button id="btnStop">🔴 停止</button>
+        <button id="btnHealth" onclick="checkHealth()">❤️ 健康检查</button>
+      </div>
+    </div>
+
+    <label style="margin-top:16px;">实时画面</label>
+    <div class="preview">
+      <img id="preview" alt="等待视频流..." style="display:none;" />
+      <div id="placeholder" style="color: #666; text-align: center;">
+        <div style="font-size: 48px; margin-bottom: 10px;">📹</div>
+        <div>等待连接视频源...</div>
+      </div>
+      <div id="status" class="status disconnected">未连接</div>
+    </div>
+
+    <label style="margin-top:16px;">系统日志</label>
+    <div id="log">系统就绪，等待操作...\n</div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const log = (msg, type = 'info') => { 
+      const d = new Date().toLocaleTimeString(); 
+      const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+      $('log').textContent += `[${d}] ${prefix} ${msg}\n`; 
+      $('log').scrollTop = $('log').scrollHeight; 
+    };
+
+    let ws = null;
+
+    function updateStatus(connected) {
+      const status = $('status');
+      if (connected) {
+        status.className = 'status connected';
+        status.textContent = '已连接';
+      } else {
+        status.className = 'status disconnected';
+        status.textContent = '未连接';
+      }
+    }
+
+    function start() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        log('WebSocket 已连接，无需重复连接', 'info');
+        return;
+      }
+      
+      const kind = $('kind').value;
+      const value = encodeURIComponent($('value').value.trim());
+      const qs = new URLSearchParams();
+      qs.set('kind', kind);
+      if (value) qs.set('value', decodeURIComponent(value));
+
+      const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + 
+                    location.host + '/ws?' + qs.toString();
+      
+      log(`正在连接: ${kind} - ${value || '默认配置'}`, 'info');
+      
+      ws = new WebSocket(wsUrl);
+      $('btnStart').disabled = true;
+
+      ws.onopen = () => {
+        log('WebSocket 连接成功', 'success');
+        updateStatus(true);
+        $('btnStart').disabled = false;
+      };
+      
+      ws.onclose = () => {
+        log('WebSocket 连接已关闭', 'info');
+        updateStatus(false);
+        $('btnStart').disabled = false;
+        $('preview').style.display = 'none';
+        $('placeholder').style.display = 'block';
+      };
+      
+      ws.onerror = (e) => {
+        log('WebSocket 连接错误: ' + (e?.message || '未知错误'), 'error');
+        updateStatus(false);
+        $('btnStart').disabled = false;
+      };
+
+      ws.onmessage = (ev) => {
+        const txt = ev.data;
+        
+        // 处理错误消息
+        if (typeof txt === 'string' && txt.startsWith('ERROR::')) {
+          log(txt, 'error');
+          return;
+        }
+        
+        // 处理图像帧
+        try {
+          $('preview').src = 'data:image/jpeg;base64,' + txt;
+          $('preview').style.display = 'block';
+          $('placeholder').style.display = 'none';
+        } catch (err) {
+          log('图像帧解析失败: ' + err.message, 'error');
+        }
+      };
+    }
+
+    function stop() {
+      if (ws) {
+        try { 
+          ws.close(); 
+        } catch (e) {
+          log('关闭连接时出错: ' + e.message, 'error');
+        }
+        ws = null;
+      }
+      updateStatus(false);
+      $('preview').style.display = 'none';
+      $('placeholder').style.display = 'block';
+      log('已停止连接', 'info');
+    }
+
+    async function checkHealth() {
+      try {
+        const response = await fetch('/health');
+        const data = await response.json();
+        if (data.status === 'ok') {
+          log('系统健康检查通过 ✅', 'success');
+        } else {
+          log('系统健康检查失败: ' + data.error, 'error');
+        }
+      } catch (e) {
+        log('健康检查请求失败: ' + e.message, 'error');
+      }
+    }
+
+    // 事件绑定
+    $('btnStart').addEventListener('click', start);
+    $('btnStop').addEventListener('click', stop);
+    
+    // 回车快速开始
+    $('value').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') start();
+    });
+
+    // 页面加载完成后的初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      log('RK3588 实时检测系统已就绪', 'success');
+      updateStatus(false);
+    });
+  </script>
+</body>
+</html>
