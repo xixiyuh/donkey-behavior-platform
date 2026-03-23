@@ -98,6 +98,28 @@ async def health_check():
         return {"status": "error", "error": str(e)}
 
 
+from fastapi import UploadFile, File
+import os
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        # 确保上传目录存在
+        upload_dir = C.BASE_DIR / "uploads"
+        upload_dir.mkdir(exist_ok=True)
+        
+        # 保存文件
+        file_path = upload_dir / file.filename
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        return {"success": True, "file_path": str(file_path)}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
 

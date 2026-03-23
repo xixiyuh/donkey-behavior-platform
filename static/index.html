@@ -346,35 +346,43 @@
         const file = input.files[0];
         window.log('文件信息: ' + JSON.stringify(file), 'info');
         
-        const valueInput = window.$('value');
-        window.log('valueInput元素: ' + (valueInput ? '存在' : '不存在'), 'info');
+        // 创建FormData对象
+        const formData = new FormData();
+        formData.append('file', file);
         
-        if (valueInput) {
-          // 直接使用文件的name属性
-          valueInput.value = file.name;
-          window.log('设置valueInput.value为: ' + file.name, 'info');
-          // 强制触发input事件，确保值被更新
-          valueInput.dispatchEvent(new Event('input'));
-        }
-        
-        // 直接传递文件路径给start函数
-        const kindSelect = window.$('kind');
-        if (kindSelect) {
-          // 根据文件类型设置kind
-          if (file.type.startsWith('image/')) {
-            kindSelect.value = 'image';
-            window.log('设置kind为: image', 'info');
-          } else if (file.type.startsWith('video/')) {
-            kindSelect.value = 'file';
-            window.log('设置kind为: file', 'info');
+        // 上传文件到后端
+        fetch('/upload', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            const filePath = data.file_path;
+            window.log('文件上传成功，路径: ' + filePath, 'success');
+            
+            // 设置kind值
+            const kindSelect = window.$('kind');
+            if (kindSelect) {
+              // 根据文件类型设置kind
+              if (file.type.startsWith('image/')) {
+                kindSelect.value = 'image';
+                window.log('设置kind为: image', 'info');
+              } else if (file.type.startsWith('video/')) {
+                kindSelect.value = 'file';
+                window.log('设置kind为: file', 'info');
+              }
+            }
+            
+            // 启动检测
+            startWithFile(filePath);
+          } else {
+            window.log('文件上传失败: ' + data.message, 'error');
           }
-        }
-        
-        // 延迟一点时间，确保所有值已设置
-        setTimeout(() => {
-          // 直接传递文件路径
-          startWithFile(file.name);
-        }, 200);
+        })
+        .catch(error => {
+          window.log('文件上传错误: ' + error.message, 'error');
+        });
       }
     }
     
