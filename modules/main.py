@@ -195,6 +195,13 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
             print(f"READER thread error: {e}", flush=True)
         finally:
             print("READER thread stopped", flush=True)
+            # 确保流资源被释放
+            try:
+                if hasattr(stream, 'release'):
+                    stream.release()
+                    print("[READER] Stream released in finally block", flush=True)
+            except Exception as e:
+                print(f"[READER] Error releasing stream in finally: {e}", flush=True)
 
     def infer():
         last_fps = 0.0

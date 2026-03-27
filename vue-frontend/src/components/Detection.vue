@@ -66,11 +66,8 @@
     <div class="row">
       <div style="display: flex; gap: 10px; align-items: end;">
         <div style="flex: 1;">
-          <label for="kind">输入源类型</label>
-          <select id="kind" v-model="kind">
-            <option value="file">本地视频文件</option>
-            <option value="image">本地图片</option>
-          </select>
+          <label>输入源类型</label>
+          <div class="input-source-text">本地图片/视频</div>
         </div>
         <div style="align-self: end;">
           <input
@@ -107,10 +104,14 @@
     <label style="margin-top:16px;">实时画面</label>
     <div class="preview">
       <img
-        v-if="frame"
+        v-if="frame && !isLoading"
         :src="`data:image/jpeg;base64,${frame}`"
         alt="实时画面"
       />
+      <div v-else-if="isLoading" class="loading-container">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载视频源...</div>
+      </div>
       <div v-else class="placeholder">
         <div style="font-size: 48px; margin-bottom: 10px;">📹</div>
         <div>等待连接视频源...</div>
@@ -157,6 +158,7 @@ const logs = ref<Array<{ time: string; prefix: string; message: string; type: st
 const logContainer = ref<HTMLElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const currentFileName = ref<string>('');
+const isLoading = ref<boolean>(false);
 
 // 日志函数
 const log = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
@@ -235,6 +237,13 @@ const handleFileSelect = async (event: Event) => {
     const file = input.files[0];
     log(`文件信息: ${JSON.stringify(file)}`, 'info');
 
+    // 先断开现有连接，避免冲突
+    if (isConnected.value) {
+      log('断开现有连接以处理新文件', 'info');
+      disconnect();
+      isLoading.value = false;
+    }
+
     // 上传文件
     const result = await uploadFile(file);
     if (result.success && result.file_path) {
@@ -272,7 +281,14 @@ const startWithFile = (filePath: string) => {
   }
 
   log(`正在连接: ${kind.value} - ${filePath}`, 'info');
+  isLoading.value = true;
   connect(kind.value, filePath);
+  // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
+  setTimeout(() => {
+    if (!isConnected.value) {
+      isLoading.value = false;
+    }
+  }, 5000); // 5秒后如果还没连接成功，自动关闭加载状态
 };
 
 // 启动函数
@@ -298,21 +314,24 @@ const start = () => {
   }
 
   log(`正在连接: ${kind.value} - ${value}`, 'info');
+  isLoading.value = true;
   connect(kind.value, value);
+  // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
+  setTimeout(() => {
+    if (!isConnected.value) {
+      isLoading.value = false;
+    }
+  }, 5000); // 5秒后如果还没连接成功，自动关闭加载状态
 };
 
 // 停止函数
 const stop = async () => {
   disconnect();
+  isLoading.value = false;
   log('已停止连接', 'info');
 
-  // 清空文件输入框，允许再次选择同一文件
-  if (fileInputRef.value) {
-    fileInputRef.value.value = '';
-  }
-
   // 等待后端释放文件资源
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  await new Promise(resolve => setTimeout(resolve, 5000));
 
   // 删除上传的文件
   if (currentFileName.value) {
@@ -325,6 +344,11 @@ const stop = async () => {
     }
     // 清空当前文件名
     currentFileName.value = '';
+  }
+
+  // 清空文件输入框，允许再次选择同一文件
+  if (fileInputRef.value) {
+    fileInputRef.value.value = '';
   }
 };
 
@@ -341,6 +365,12 @@ const checkHealth = async () => {
     log('健康检查请求失败', 'error');
   }
 };
+
+// 监听连接状态变化，当连接状态改变时重置加载状态
+watch(isConnected, (newValue) => {
+  // 无论是连接成功还是关闭，都关闭加载状态
+  isLoading.value = false;
+});
 
 // 组件挂载时加载数据
 onMounted(() => {
@@ -379,7 +409,7 @@ label {
   margin: 8px 0 4px;
 }
 
-input, select {
+input, select, .input-source-text {
   width: 100%;
   padding: 10px;
   border-radius: 10px;
@@ -434,6 +464,37 @@ button:disabled {
 
 .placeholder {
   color: #666;
+  text-align: center;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #60a5fa;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  color: #b9c2d0;
+  font-size: 16px;
   text-align: center;
 }
 
