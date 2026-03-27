@@ -10,7 +10,7 @@
           v-model="selectedBarn"
           @change="loadPens"
         >
-          <option value="">请选择养殖舍</option>
+          <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
           <option
             v-for="barn in barnStore.allBarns"
             :key="barn.id"
@@ -26,7 +26,7 @@
           id="eventPenId"
           v-model="selectedPen"
         >
-          <option value="">请选择栏</option>
+          <option value="" disabled selected style="color: #888;">请选择栏号</option>
           <option
             v-for="pen in pens"
             :key="pen.id"
@@ -97,8 +97,8 @@ const barnStore = useBarnStore();
 const eventStore = useEventStore();
 
 const pens = ref<Pen[]>([]);
-const selectedBarn = ref<number>(0);
-const selectedPen = ref<number>(0);
+const selectedBarn = ref<string>('');
+const selectedPen = ref<string>('');
 
 // 加载养殖舍列表
 const loadBarns = async () => {
@@ -113,14 +113,14 @@ const loadBarns = async () => {
 const loadPens = async () => {
   if (!selectedBarn.value) {
     pens.value = [];
-    selectedPen.value = 0;
+    selectedPen.value = '';
     return;
   }
 
   try {
-    const penList = await barnStore.fetchBarnPens(selectedBarn.value);
+    const penList = await barnStore.fetchBarnPens(parseInt(selectedBarn.value));
     pens.value = penList;
-    selectedPen.value = 0;
+    selectedPen.value = '';
   } catch (err) {
     console.error('Error loading pens:', err);
   }
@@ -130,9 +130,9 @@ const loadPens = async () => {
 const loadEvents = async () => {
   try {
     if (selectedPen.value) {
-      await eventStore.fetchEventsByPen(selectedPen.value);
+      await eventStore.fetchEventsByPen(parseInt(selectedPen.value));
     } else if (selectedBarn.value) {
-      await eventStore.fetchEventsByBarn(selectedBarn.value);
+      await eventStore.fetchEventsByBarn(parseInt(selectedBarn.value));
     } else {
       await eventStore.fetchEvents();
     }
@@ -286,19 +286,19 @@ th:nth-child(9), td:nth-child(9) {
   .form-row {
     grid-template-columns: 1fr;
   }
-  
+
   .buttons {
     flex-direction: column;
   }
-  
+
   button {
     width: 100%;
   }
-  
+
   .table-container {
     font-size: 12px;
   }
-  
+
   th, td {
     padding: 6px 8px;
   }

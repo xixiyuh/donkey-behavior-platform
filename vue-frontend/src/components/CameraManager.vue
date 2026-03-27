@@ -5,36 +5,37 @@
     <div class="form-group">
       <label for="cameraBarnId">所属养殖舍</label>
       <select
-        id="cameraBarnId"
-        v-model="cameraForm.barn_id"
-        @change="loadPens"
-      >
-        <option value="">请选择养殖舍</option>
-        <option
-          v-for="barn in barnStore.allBarns"
-          :key="barn.id"
-          :value="barn.id"
+          id="cameraBarnId"
+          v-model="cameraForm.barn_id"
+          @change="() => { loadPens(); filterCameras(); }"
         >
-          {{ barn.name }}
-        </option>
-      </select>
+          <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
+          <option
+            v-for="barn in barnStore.allBarns"
+            :key="barn.id"
+            :value="barn.id"
+          >
+            {{ barn.name }}
+          </option>
+        </select>
     </div>
 
     <div class="form-group">
       <label for="cameraPenId">所属栏</label>
       <select
-        id="cameraPenId"
-        v-model="cameraForm.pen_id"
-      >
-        <option value="">请选择栏</option>
-        <option
-          v-for="pen in pens"
-          :key="pen.id"
-          :value="pen.id"
+          id="cameraPenId"
+          v-model="cameraForm.pen_id"
+          @change="filterCameras"
         >
-          第{{ pen.pen_number }}栏
-        </option>
-      </select>
+          <option value="" disabled selected style="color: #888;">请选择栏号</option>
+          <option
+            v-for="pen in pens"
+            :key="pen.id"
+            :value="pen.id"
+          >
+            第{{ pen.pen_number }}栏
+          </option>
+        </select>
     </div>
 
     <div class="form-group">
@@ -83,7 +84,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="camera in cameraStore.allCameras" :key="camera.id">
+          <tr v-for="camera in filteredCameras" :key="camera.id">
             <td>{{ camera.id }}</td>
             <td>{{ camera.camera_id }}</td>
             <td>{{ camera.pen_id }}</td>
@@ -94,7 +95,7 @@
               <button @click="deleteCamera(camera.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="cameraStore.allCameras.length === 0">
+          <tr v-if="filteredCameras.length === 0">
             <td colspan="6" style="text-align: center;">暂无摄像头数据</td>
           </tr>
         </tbody>
@@ -117,11 +118,14 @@ const cameraStore = useCameraStore();
 const pens = ref<Pen[]>([]);
 
 const cameraForm = ref({
-  barn_id: 0,
-  pen_id: 0,
+  barn_id: '',
+  pen_id: '',
   camera_id: '',
   flv_url: '',
 });
+
+// 筛选后的摄像头列表
+const filteredCameras = ref<Camera[]>([]);
 
 // 加载养殖舍列表
 const loadBarns = async () => {
@@ -136,14 +140,14 @@ const loadBarns = async () => {
 const loadPens = async () => {
   if (!cameraForm.value.barn_id) {
     pens.value = [];
-    cameraForm.value.pen_id = 0;
+    cameraForm.value.pen_id = '';
     return;
   }
 
   try {
-    const penList = await barnStore.fetchBarnPens(cameraForm.value.barn_id);
+    const penList = await barnStore.fetchBarnPens(parseInt(cameraForm.value.barn_id.toString()));
     pens.value = penList;
-    cameraForm.value.pen_id = 0;
+    cameraForm.value.pen_id = '';
   } catch (err) {
     console.error('Error loading pens:', err);
   }
@@ -153,9 +157,30 @@ const loadPens = async () => {
 const loadCameras = async () => {
   try {
     await cameraStore.fetchCameras();
+    // 加载后筛选
+    filterCameras();
   } catch (err) {
     console.error('Error loading cameras:', err);
   }
+};
+
+// 按养殖舍和栏筛选摄像头列表
+const filterCameras = () => {
+  let result = cameraStore.allCameras;
+
+  // 按养殖舍筛选
+  if (cameraForm.value.barn_id) {
+    const barnId = parseInt(cameraForm.value.barn_id.toString());
+    result = result.filter(camera => camera.barn_id === barnId);
+  }
+
+  // 按栏筛选
+  if (cameraForm.value.pen_id) {
+    const penId = parseInt(cameraForm.value.pen_id.toString());
+    result = result.filter(camera => camera.pen_id === penId);
+  }
+
+  filteredCameras.value = result;
 };
 
 // 获取养殖舍名称
@@ -184,8 +209,8 @@ const createCamera = async () => {
 
     // 重置表单
     cameraForm.value = {
-      barn_id: 0,
-      pen_id: 0,
+      barn_id: '',
+      pen_id: '',
       camera_id: '',
       flv_url: '',
     };

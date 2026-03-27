@@ -8,8 +8,9 @@
         <select
           id="penBarnId"
           v-model="penForm.barn_id"
+          @change="filterPens"
         >
-          <option value="">请选择养殖舍</option>
+          <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
           <option
             v-for="barn in barnStore.allBarns"
             :key="barn.id"
@@ -55,7 +56,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="pen in penStore.allPens" :key="pen.id">
+          <tr v-for="pen in filteredPens" :key="pen.id">
             <td>{{ pen.id }}</td>
             <td>{{ pen.pen_number }}</td>
             <td>{{ getBarnName(pen.barn_id) }}</td>
@@ -64,7 +65,7 @@
               <button @click="deletePen(pen.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="penStore.allPens.length === 0">
+          <tr v-if="filteredPens.length === 0">
             <td colspan="4" style="text-align: center;">暂无栏数据</td>
           </tr>
         </tbody>
@@ -83,9 +84,12 @@ const barnStore = useBarnStore();
 const penStore = usePenStore();
 
 const penForm = ref({
-  barn_id: 0,
+  barn_id: '',
   pen_number: 1,
 });
+
+// 筛选后的栏列表
+const filteredPens = ref<Pen[]>([]);
 
 // 加载养殖舍列表
 const loadBarns = async () => {
@@ -100,8 +104,21 @@ const loadBarns = async () => {
 const loadPens = async () => {
   try {
     await penStore.fetchPens();
+    // 加载后筛选
+    filterPens();
   } catch (err) {
     console.error('Error loading pens:', err);
+  }
+};
+
+// 按养殖舍筛选栏列表
+const filterPens = () => {
+  if (penForm.value.barn_id) {
+    // 筛选出属于所选养殖舍的栏
+    filteredPens.value = penStore.allPens.filter(pen => pen.barn_id === parseInt(penForm.value.barn_id.toString()));
+  } else {
+    // 显示所有栏
+    filteredPens.value = penStore.allPens;
   }
 };
 
@@ -132,7 +149,7 @@ const createPen = async () => {
 
     // 重置表单
     penForm.value = {
-      barn_id: 0,
+      barn_id: '',
       pen_number: 1,
     };
   } catch (err: any) {
@@ -276,11 +293,11 @@ th:nth-child(4), td:nth-child(4) {
   .form-row {
     grid-template-columns: 1fr;
   }
-  
+
   .buttons {
     flex-direction: column;
   }
-  
+
   button {
     width: 100%;
   }
