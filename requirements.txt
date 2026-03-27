@@ -1,10 +1,22 @@
+# Web框架和服务器
 fastapi
 uvicorn[standard]
-ocv-python-headless
+pydantic
+pydantic-settings
+python-dotenv
+
+# 图像处理和计算机视觉
+opencv-python-headless
 numpy
+Pillow
+
+# 模型和推理
+ultralytics
+
+# WebSocket和文件处理
 websockets
 python-multipart
-naiofiles
-Pillow
-ultralytics
-pydantic
+aiofiles
+
+# 其他
+requests

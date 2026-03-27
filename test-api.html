@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试API连接</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #0b0e1f;
+            color: #e7e9ee;
+        }
+        .card {
+            background: #13172f;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #60a5fa;
+            margin-bottom: 20px;
+        }
+        button {
+            cursor: pointer;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid #345;
+            background: #1d2a5a;
+            color: #e7e9ee;
+            transition: background 0.2s;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background: #26346e;
+        }
+        pre {
+            background: #172045;
+            padding: 10px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+        .error {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>测试API连接</h1>
+        <button onclick="testApiConnection()">测试API连接</button>
+        <div id="response-container"></div>
+    </div>
+
+    <script>
+        async function testApiConnection() {
+            const responseContainer = document.getElementById('response-container');
+            responseContainer.innerHTML = '<p>正在测试API连接...</p>';
+
+            try {
+                console.log('Testing API connection...');
+                const response = await fetch('http://localhost:5173/api/barns');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('API response:', data);
+                responseContainer.innerHTML = `
+                    <h2>API响应:</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('API error:', error);
+                responseContainer.innerHTML = `
+                    <h2 class="error">API错误:</h2>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

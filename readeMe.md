@@ -2,11 +2,19 @@
 
 基于 FastAPI + WebSocket + YOLO 的实时视频流检测系统，支持多种视频源（RTSP、HLS、本地文件等），可部署在 RK3588 开发板或 Windows/Linux 环境。
 
-conda activate detec-realtime
+
+& "D:\Anaconda3\shell\condabin\conda-hook.ps1"
+conda activate E:\Anaconda3\envs\yolov8
 e:
 cd E:\donkey\萤石云\realtime-detector
 uvicorn modules.main:app --host 127.0.0.1 --port 8080
 http://127.0.0.1:8080/
+
+conda activate yolov8
+e:
+cd E:\donkey\萤石云\realtime-detector\vue-frontend
+npm run dev
+http://localhost:5173/detection
 
 https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_1_2.flv?expire=1799307668&id=930848885333229568&t=3d7f5c7af02f666391f092204cae900f60e075481b289e74400314063d7f0085&ev=101&supportH265=1
 https://open.ys7.com/v3/openlive/FR3098735_1_2.m3u8?expire=1799307668&id=930848885066555392&t=acfcf2b5652add9dfa2239bd5b386ae5b808aace4dad6c0aac1a0168448b4113&ev=101&supportH265=1

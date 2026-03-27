@@ -71,3 +71,6 @@ mpvpipe_debug.log
 
 # Runtime files
 *.rgb
+
+# Upload files
+uploads/

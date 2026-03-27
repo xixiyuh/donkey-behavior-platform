@@ -1,0 +1,132 @@
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  margin: 0;
+  padding: 0;
+  background: #0b1020;
+  color: #e7e9ee;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #121833;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #445;
+}
+
+/* 通用按钮样式 */
+button {
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #345;
+  background: #1d2a5a;
+  color: #e7e9ee;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #26346e;
+}
+
+button:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+/* 通用输入框样式 */
+input, select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #334;
+  background: #172045;
+  color: #e7e9ee;
+  box-sizing: border-box;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+/* 通用标签样式 */
+label {
+  font-size: 14px;
+  color: #b9c2d0;
+  display: block;
+  margin: 8px 0 4px;
+}
+
+/* 通用表格样式 */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+th, td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #334;
+  word-wrap: break-word;
+}
+
+th {
+  background: #172045;
+  color: #60a5fa;
+}
+
+/* 错误消息样式 */
+.error-message {
+  background: #7f1d1d;
+  color: #fecaca;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+/* 表格容器样式 */
+.table-container {
+  overflow-x: auto;
+  margin-top: 15px;
+}
+
+/* 表单行样式 */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+/* 表单组样式 */
+.form-group {
+  margin-bottom: 15px;
+}
+
+/* 按钮容器样式 */
+.buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+}

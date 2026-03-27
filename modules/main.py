@@ -2,6 +2,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from contextlib import asynccontextmanager
 from urllib.parse import unquote
@@ -68,6 +69,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Realtime Detector", version="1.0.0", lifespan=lifespan)
 
+# 配置CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 静态文件服务
 static_dir = C.BASE_DIR / "static"
 static_dir.mkdir(exist_ok=True)
@@ -119,6 +129,28 @@ async def upload_file(file: UploadFile = File(...)):
         return {"success": False, "message": str(e)}
 
 
+@app.delete("/upload/{filename}")
+async def delete_uploaded_file(filename: str):
+    """删除已上传的文件"""
+    try:
+        upload_dir = C.BASE_DIR / "uploads"
+        file_path = upload_dir / filename
+        
+        # 安全检查：确保文件路径在uploads目录内
+        try:
+            file_path.resolve().relative_to(upload_dir.resolve())
+        except ValueError:
+            return {"success": False, "message": "Invalid file path"}
+        
+        if file_path.exists():
+            file_path.unlink()
+            return {"success": True, "message": f"File {filename} deleted successfully"}
+        else:
+            return {"success": False, "message": f"File {filename} not found"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
@@ -126,11 +158,14 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
     def reader():
         cnt = 0
         last = time.time()
+        consecutive_failures = 0
+        max_consecutive_failures = 10  # 连续失败10次认为流已结束
         try:
             while not stop_event.is_set():
                 ok, frame = stream.read()
                 if ok and frame is not None:
                     cnt += 1
+                    consecutive_failures = 0
 
                 if time.time() - last > 1:
                     print(f"READER fps≈{cnt}, ok={ok}, frame={'None' if frame is None else frame.shape}", flush=True)
@@ -138,6 +173,11 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                     last = time.time()
 
                 if not ok or frame is None:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("[READER] Stream ended, setting stop event", flush=True)
+                        stop_event.set()
+                        break
                     time.sleep(0.02)
                     continue
 
