@@ -8,7 +8,7 @@
         <select
           id="eventBarnId"
           v-model="selectedBarn"
-          @change="loadPens"
+          @change="handleBarnChange"
         >
           <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
           <option
@@ -25,6 +25,7 @@
         <select
           id="eventPenId"
           v-model="selectedPen"
+          @change="handlePenChange"
         >
           <option value="" disabled selected style="color: #888;">请选择栏号</option>
           <option
@@ -36,15 +37,23 @@
           </option>
         </select>
       </div>
-    </div>
-
-    <div class="buttons" style="margin-bottom: 15px;">
-      <button
-        @click="loadEvents"
-        :disabled="eventStore.isLoading || barnStore.isLoading"
-      >
-        {{ eventStore.isLoading ? '查询中...' : '查询事件' }}
-      </button>
+      <div class="form-group">
+        <label for="eventCameraId">摄像头</label>
+        <select
+          id="eventCameraId"
+          v-model="selectedCamera"
+          @change="loadEvents"
+        >
+          <option value="" disabled selected style="color: #888;">请选择摄像头</option>
+          <option
+            v-for="camera in cameras"
+            :key="camera.id"
+            :value="camera.id"
+          >
+            {{ camera.camera_id }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <div v-if="eventStore.error" class="error-message">
@@ -57,12 +66,9 @@
           <tr>
             <th>ID</th>
             <th>开始时间</th>
-            <th>结束时间</th>
             <th>持续时间(秒)</th>
             <th>平均置信度</th>
-            <th>最大置信度</th>
             <th>置信图</th>
-            <th>所属摄像头</th>
             <th>所属栏</th>
             <th>所属养殖舍</th>
           </tr>
@@ -70,42 +76,59 @@
         <tbody>
           <tr v-for="event in eventStore.allEvents" :key="event.id">
             <td>{{ event.id }}</td>
-            <td>{{ event.start_time }}</td>
-            <td>{{ event.end_time }}</td>
+            <td>{{ formatDateTime(event.start_time) }}</td>
             <td>{{ event.duration }}</td>
             <td>{{ event.avg_confidence.toFixed(2) }}</td>
-            <td>{{ event.max_confidence.toFixed(2) }}</td>
             <td>
-              <div class="confidence-image" v-if="event.screenshot1">
-                <img :src="event.screenshot1" alt="置信图" class="screenshot-img" />
+              <div class="confidence-image" v-if="event.screenshot">
+                <img
+                  :src="getImageUrl(event.screenshot)"
+                  alt="置信图"
+                  class="screenshot-img"
+                  @click="openImageModal(getImageUrl(event.screenshot))"
+                  style="cursor: pointer;"
+                />
               </div>
               <div v-else class="no-image">无截图</div>
             </td>
-            <td>{{ event.camera_id }}</td>
             <td>{{ event.pen_id }}</td>
             <td>{{ getBarnName(event.barn_id) }}</td>
           </tr>
           <tr v-if="eventStore.allEvents.length === 0">
-            <td colspan="10" style="text-align: center;">暂无事件数据</td>
+            <td colspan="7" style="text-align: center;">暂无事件数据</td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- 图片放大模态框 -->
+    <div v-if="showImageModal" class="image-modal" @click="closeImageModal">
+      <div class="modal-content" @click.stop>
+        <span class="close-btn" @click="closeImageModal">&times;</span>
+        <img :src="currentImageUrl" alt="放大图片" class="modal-image" />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { useEventStore } from '../stores/event';
-import type { Barn, Pen, MatingEvent } from '../types';
+import type { Barn, Pen, MatingEvent, Camera } from '../types';
 
 const barnStore = useBarnStore();
 const eventStore = useEventStore();
 
 const pens = ref<Pen[]>([]);
+const cameras = ref<Camera[]>([]);
 const selectedBarn = ref<string>('');
 const selectedPen = ref<string>('');
+const selectedCamera = ref<string>('');
+
+// 图片模态框相关变量
+const showImageModal = ref(false);
+const currentImageUrl = ref('');
 
 // 加载养殖舍列表
 const loadBarns = async () => {
@@ -121,6 +144,7 @@ const loadPens = async () => {
   if (!selectedBarn.value) {
     pens.value = [];
     selectedPen.value = '';
+    loadCameras();
     return;
   }
 
@@ -128,9 +152,39 @@ const loadPens = async () => {
     const penList = await barnStore.fetchBarnPens(parseInt(selectedBarn.value));
     pens.value = penList;
     selectedPen.value = '';
+    loadCameras();
   } catch (err) {
     console.error('Error loading pens:', err);
   }
+};
+
+// 加载摄像头列表
+const loadCameras = async () => {
+  cameras.value = [];
+  selectedCamera.value = '';
+
+  if (!selectedBarn.value) {
+    return;
+  }
+
+  try {
+    // 这里需要添加获取摄像头列表的逻辑
+    // 暂时使用空数组，需要根据实际情况实现
+  } catch (err) {
+    console.error('Error loading cameras:', err);
+  }
+};
+
+// 处理养殖舍变更
+const handleBarnChange = async () => {
+  await loadPens();
+  loadEvents();
+};
+
+// 处理栏变更
+const handlePenChange = async () => {
+  await loadCameras();
+  loadEvents();
 };
 
 // 加载事件列表
@@ -148,6 +202,20 @@ const loadEvents = async () => {
   }
 };
 
+// 格式化日期时间
+const formatDateTime = (dateTime: string): string => {
+  const date = new Date(dateTime);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+};
+
 // 获取养殖舍名称
 const getBarnName = (barnId: number): string => {
   if (!Array.isArray(barnStore.allBarns)) {
@@ -157,9 +225,31 @@ const getBarnName = (barnId: number): string => {
   return barn ? barn.name : barnId.toString();
 };
 
+// 获取图片URL
+const getImageUrl = (screenshotPath: string): string => {
+  // 构建完整的图片URL
+  if (screenshotPath.startsWith('/')) {
+    return `http://localhost:8000${screenshotPath}`;
+  }
+  return screenshotPath;
+};
+
+// 打开图片模态框
+const openImageModal = (imageUrl: string) => {
+  currentImageUrl.value = imageUrl;
+  showImageModal.value = true;
+};
+
+// 关闭图片模态框
+const closeImageModal = () => {
+  showImageModal.value = false;
+  currentImageUrl.value = '';
+};
+
 // 组件挂载时加载数据
 onMounted(async () => {
   await loadBarns();
+  loadEvents();
 });
 </script>
 
@@ -170,7 +260,7 @@ onMounted(async () => {
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
   margin-bottom: 15px;
 }
@@ -339,5 +429,46 @@ th:nth-child(10), td:nth-child(10) {
   th, td {
     padding: 6px 8px;
   }
+}
+
+/* 图片模态框样式 */
+.image-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.close-btn {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  color: white;
+  font-size: 30px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  color: #ccc;
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 4px;
 }
 </style>

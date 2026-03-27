@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION
+from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES
 
 class MatingDetector:
     def __init__(self):
@@ -24,8 +24,17 @@ class MatingDetector:
             pen_id: 栏ID
             barn_id: 舍ID
         """
-        # 过滤出standing类型的检测结果
-        mating_detections = [d for d in detections if d['class'] == 'standing' and d['confidence'] > 0.5]
+        # 检查超时事件
+        self.check_timeout_events()
+        
+        # 打印检测结果
+        print(f"Received detections: {len(detections)} objects")
+        for d in detections:
+            print(f"  - {d['class']} (conf: {d['confidence']:.2f}, track_id: {d.get('track_id')})")
+        
+        # 过滤出mating类型的检测结果
+        mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
+        print(f"Filtered mating detections: {len(mating_detections)} (confidence threshold: {MATING_CONF_THRES})")
         
         # 检查是否有mating事件
         if mating_detections:
@@ -33,12 +42,17 @@ class MatingDetector:
             for detection in mating_detections:
                 # 使用track_id来区分不同的mating事件
                 track_id = detection.get('track_id')
+                print(f"Processing detection with track_id: {track_id}")
                 if track_id is not None:
                     # 构建事件键，包含track_id以区分不同的mating事件
-                    event_key = f"{camera_id}_{pen_id}_{barn_id}_{track_id}"
+                    # 优化事件键，使用简洁的标识符
+                    camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id else 'unknown'
+                    event_key = f"{camera_key}_{pen_id}_{barn_id}_{track_id}"
+                    print(f"Event key: {event_key}")
                     
                     if event_key not in self.current_mating_events:
                         # 开始新的mating事件
+                        print(f"Starting new event: {event_key}")
                         self.current_mating_events[event_key] = {
                             'start_time': datetime.now(),
                             'detections': [detection],
@@ -54,6 +68,7 @@ class MatingDetector:
                         # 更新现有的mating事件
                         event = self.current_mating_events[event_key]
                         event['detections'].append(detection)
+                        print(f"Updating event: {event_key}, detection count: {len(event['detections'])}")
                         
                         # 保存置信度更高的截图（最多保存3张）
                         if len(event['screenshots']) < 3:
@@ -78,6 +93,7 @@ class MatingDetector:
                     event_keys_to_remove.append(event_key)
             
             # 结束这些事件
+            print(f"Ending events: {event_keys_to_remove}")
             for event_key in event_keys_to_remove:
                 self.end_mating_event(event_key)
     
@@ -131,6 +147,7 @@ class MatingDetector:
         # 计算事件持续时间（秒）
         end_time = datetime.now()
         duration = int((end_time - event['start_time']).total_seconds())
+        print(f"Event duration: {duration}s")
         
         # 检查事件持续时间是否达到阈值
         if duration < MATING_EVENT_MIN_DURATION:
@@ -142,28 +159,34 @@ class MatingDetector:
         avg_confidence = np.mean(confidences) if confidences else 0
         max_confidence = max(confidences) if confidences else 0
         
-        # 确保有3张截图（如果不足，重复最后一张）
-        screenshots = event['screenshots']
-        while len(screenshots) < 3:
-            if screenshots:
-                screenshots.append(screenshots[-1])
+        # 选择置信度最高的截图
+        screenshot = None
+        if event['screenshots']:
+            # 找出最大置信度对应的截图
+            max_conf_index = confidences.index(max_confidence)
+            # 确保索引在有效范围内
+            if max_conf_index < len(event['screenshots']):
+                screenshot = event['screenshots'][max_conf_index]
             else:
-                screenshots.append(None)
+                # 如果索引超出范围，使用最后一张截图
+                screenshot = event['screenshots'][-1]
         
         # 记录到数据库
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-        INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
-                                   avg_confidence, max_confidence, screenshot1, screenshot2, screenshot3)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (event['camera_id'], event['pen_id'], event['barn_id'], 
-              event['start_time'], end_time, duration, avg_confidence, max_confidence, 
-              screenshots[0], screenshots[1], screenshots[2]))
-        conn.commit()
-        conn.close()
-        
-        print(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+            INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
+                                       avg_confidence, max_confidence, screenshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (event['camera_id'], event['pen_id'], event['barn_id'], 
+                  event['start_time'], end_time, duration, avg_confidence, max_confidence, 
+                  screenshot))
+            conn.commit()
+            conn.close()
+            print(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
+        except Exception as e:
+            print(f"Error recording event: {e}")
     
     def check_timeout_events(self, timeout=30):
         """
@@ -176,8 +199,10 @@ class MatingDetector:
         keys_to_remove = []
         
         for event_key, event in self.current_mating_events.items():
-            last_detection_time = event['detections'][-1]['timestamp'] if event['detections'] else event['start_time']
-            if (current_time - last_detection_time).total_seconds() > timeout:
+            # 计算事件持续时间
+            duration = (current_time - event['start_time']).total_seconds()
+            # 如果事件持续时间超过超时时间，结束事件
+            if duration > timeout:
                 keys_to_remove.append(event_key)
         
         for key in keys_to_remove:

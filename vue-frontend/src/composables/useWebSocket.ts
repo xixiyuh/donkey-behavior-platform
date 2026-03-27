@@ -9,7 +9,7 @@ export function useWebSocket() {
   const error = ref<string | null>(null);
   const frame = ref<string>('');
 
-  const connect = (kind: string, value: string) => {
+  const connect = (kind: string, value: string, cameraId?: string, penId?: number, barnId?: number) => {
     // 断开现有连接
     if (ws.value) {
       ws.value.close();
@@ -18,6 +18,9 @@ export function useWebSocket() {
     const qs = new URLSearchParams();
     qs.set('kind', kind);
     if (value) qs.set('value', value);
+    if (cameraId) qs.set('camera_id', cameraId);
+    if (penId) qs.set('pen_id', penId.toString());
+    if (barnId) qs.set('barn_id', barnId.toString());
 
     // 使用完整的后端WebSocket URL
     const wsUrl = `${WS_BASE_URL}/ws?${qs.toString()}`;

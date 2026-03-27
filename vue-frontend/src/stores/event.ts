@@ -2,6 +2,9 @@ import { defineStore } from 'pinia';
 import axios from 'axios';
 import type { MatingEvent } from '../types';
 
+// 设置axios的基础URL为后端服务器的地址
+axios.defaults.baseURL = 'http://localhost:8080';
+
 export const useEventStore = defineStore('event', {
   state: () => ({
     events: [] as MatingEvent[],

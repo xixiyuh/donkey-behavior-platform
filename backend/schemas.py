@@ -57,7 +57,7 @@ class Camera(CameraBase):
         from_attributes = True
 
 class MatingEventBase(BaseModel):
-    camera_id: int
+    camera_id: str
     pen_id: int
     barn_id: int
     start_time: datetime
@@ -65,9 +65,7 @@ class MatingEventBase(BaseModel):
     duration: int
     avg_confidence: float
     max_confidence: float
-    screenshot1: Optional[str] = None
-    screenshot2: Optional[str] = None
-    screenshot3: Optional[str] = None
+    screenshot: Optional[str] = None
 
 class MatingEventCreate(MatingEventBase):
     pass

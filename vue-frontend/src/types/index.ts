@@ -35,9 +35,7 @@ export interface MatingEvent {
   camera_id: string;
   pen_id: number;
   barn_id: number;
-  screenshot1?: string;
-  screenshot2?: string;
-  screenshot3?: string;
+  screenshot?: string;
   created_at?: string;
 }
 

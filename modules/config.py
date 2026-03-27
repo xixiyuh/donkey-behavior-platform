@@ -7,8 +7,11 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 IMG_SIZE = (640, 640)  # (w,h)
 CLASSES = ("standing", "mating", "lying")
 NUM_CLASSES = len(CLASSES)
-CONF_THRES = 0.25
+CONF_THRES = 0.25       #注意这是所有类别的置信度阈值
 IOU_THRES = 0.45
+# ------- 事件检测参数 -------
+MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
+MATING_CONF_THRES = 0.4  # mating检测的置信度阈值
 
 # ✅ Windows 先跑 .pt
 PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt")  # ←改成你的真实路径也行
@@ -40,8 +43,7 @@ COLOR_STANDING = (0, 255, 0)
 COLOR_MATING = (0, 0, 255)
 COLOR_LYING = (255, 0, 0)
 
-# ------- 事件检测参数 -------
-MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
+
 
 # ------- 摄像头FLV地址配置 -------
 # 格式：{barn_id: {pen_id: [camera1_url, camera2_url, camera3_url]}}

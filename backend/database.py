@@ -57,7 +57,7 @@ def init_db():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS mating_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        camera_id INTEGER NOT NULL,
+        camera_id TEXT NOT NULL,
         pen_id INTEGER NOT NULL,
         barn_id INTEGER NOT NULL,
         start_time TIMESTAMP NOT NULL,
@@ -65,11 +65,8 @@ def init_db():
         duration INTEGER NOT NULL,
         avg_confidence REAL NOT NULL,
         max_confidence REAL NOT NULL,
-        screenshot1 TEXT,
-        screenshot2 TEXT,
-        screenshot3 TEXT,
+        screenshot TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (camera_id) REFERENCES cameras (id),
         FOREIGN KEY (pen_id) REFERENCES pens (id),
         FOREIGN KEY (barn_id) REFERENCES barns (id)
     )

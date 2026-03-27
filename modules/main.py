@@ -256,11 +256,14 @@ async def ws_endpoint(
         kind: str = Query("camera",
                           description="camera | file | rtsp | image | mpv | mpvpipe | rtmp | flv | hls | m3u8"),
         value: Optional[str] = Query(None, description="path/url/index"),
+        camera_id: Optional[str] = Query(None, description="Camera ID"),
+        pen_id: Optional[int] = Query(None, description="Pen ID"),
+        barn_id: Optional[int] = Query(None, description="Barn ID"),
 ):
     await ws.accept()
     await ws_manager.register(ws)
 
-    print(f"[WS] New connection: kind={kind}, value={value}", flush=True)
+    print(f"[WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", flush=True)
 
     stream = None
     stop_event = threading.Event()
@@ -278,6 +281,15 @@ async def ws_endpoint(
         # 异步打开视频源，避免阻塞事件循环
         loop = asyncio.get_event_loop()
         stream = await loop.run_in_executor(None, lambda: open_source(kind, value or ""))
+        
+        # 设置摄像头、栏和舍的ID
+        if camera_id:
+            stream.camera_id = camera_id
+        if pen_id:
+            stream.pen_id = pen_id
+        if barn_id:
+            stream.barn_id = barn_id
+        print(f"[WS] Stream configured: camera_id={stream.camera_id if hasattr(stream, 'camera_id') else None}, pen_id={stream.pen_id if hasattr(stream, 'pen_id') else None}, barn_id={stream.barn_id if hasattr(stream, 'barn_id') else None}", flush=True)
 
         # 启动处理线程
         threads = start_pipeline(stream, det, result_queue, stop_event)

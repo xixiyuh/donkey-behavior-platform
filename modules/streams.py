@@ -185,8 +185,9 @@ class MPVPipeStream:
                     self.stderr_buffer.append(decoded)
                     if len(self.stderr_buffer) > 100:
                         self.stderr_buffer.pop(0)
-                    # 打印所有日志以便调试
-                    print(f"[MPVPIPE] {decoded}", flush=True)
+                    # 只打印错误和关键信息，过滤掉进度信息
+                    if any(keyword in decoded for keyword in ['error', 'failed', 'warning', 'exit', 'started', 'PID']):
+                        print(f"[MPVPIPE] {decoded}", flush=True)
                 except Exception:
                     pass
         except Exception as e:

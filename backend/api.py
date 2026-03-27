@@ -242,7 +242,7 @@ def create_mating_event(event: MatingEventCreate):
     event_id = MatingEvent.create(
         event.camera_id, event.pen_id, event.barn_id, event.start_time, event.end_time, 
         event.duration, event.avg_confidence, event.max_confidence, 
-        event.screenshot1, event.screenshot2, event.screenshot3
+        event.screenshot
     )
     created_event = MatingEvent.get_by_id(event_id)
     if not created_event:
@@ -257,9 +257,7 @@ def create_mating_event(event: MatingEventCreate):
         "duration": created_event["duration"],
         "avg_confidence": created_event["avg_confidence"],
         "max_confidence": created_event["max_confidence"],
-        "screenshot1": created_event["screenshot1"],
-        "screenshot2": created_event["screenshot2"],
-        "screenshot3": created_event["screenshot3"],
+        "screenshot": created_event["screenshot"],
         "created_at": created_event["created_at"]
     }
 
@@ -276,9 +274,7 @@ def get_mating_events():
         "duration": event["duration"],
         "avg_confidence": event["avg_confidence"],
         "max_confidence": event["max_confidence"],
-        "screenshot1": event["screenshot1"],
-        "screenshot2": event["screenshot2"],
-        "screenshot3": event["screenshot3"],
+        "screenshot": event["screenshot"],
         "created_at": event["created_at"]
     } for event in events]
 
@@ -297,9 +293,7 @@ def get_mating_event(event_id: int):
         "duration": event["duration"],
         "avg_confidence": event["avg_confidence"],
         "max_confidence": event["max_confidence"],
-        "screenshot1": event["screenshot1"],
-        "screenshot2": event["screenshot2"],
-        "screenshot3": event["screenshot3"],
+        "screenshot": event["screenshot"],
         "created_at": event["created_at"]
     }
 
@@ -316,9 +310,7 @@ def get_mating_events_by_pen(pen_id: int):
         "duration": event["duration"],
         "avg_confidence": event["avg_confidence"],
         "max_confidence": event["max_confidence"],
-        "screenshot1": event["screenshot1"],
-        "screenshot2": event["screenshot2"],
-        "screenshot3": event["screenshot3"],
+        "screenshot": event["screenshot"],
         "created_at": event["created_at"]
     } for event in events]
 
@@ -335,8 +327,6 @@ def get_mating_events_by_barn(barn_id: int):
         "duration": event["duration"],
         "avg_confidence": event["avg_confidence"],
         "max_confidence": event["max_confidence"],
-        "screenshot1": event["screenshot1"],
-        "screenshot2": event["screenshot2"],
-        "screenshot3": event["screenshot3"],
+        "screenshot": event["screenshot"],
         "created_at": event["created_at"]
     } for event in events]

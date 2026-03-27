@@ -277,6 +277,8 @@ const handleFileSelect = (event: Event) => {
 const startWithFile = (filePath: string) => {
   log(`当前kind: ${kind.value}`, 'info');
   log(`当前value: ${filePath}`, 'info');
+  log(`当前barn_id: ${selectedBarn.value}`, 'info');
+  log(`当前pen_id: ${selectedPen.value}`, 'info');
 
   if (!filePath) {
     log('请选择文件或摄像头', 'error');
@@ -285,7 +287,7 @@ const startWithFile = (filePath: string) => {
 
   log(`正在连接: ${kind.value} - ${filePath}`, 'info');
   isLoading.value = true;
-  connect(kind.value, filePath);
+  connect(kind.value, filePath, 'local-file', selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
   // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {
@@ -310,6 +312,8 @@ const start = () => {
 
   log(`当前kind: ${kind.value}`, 'info');
   log(`当前value: ${value}`, 'info');
+  log(`当前barn_id: ${selectedBarn.value}`, 'info');
+  log(`当前pen_id: ${selectedPen.value}`, 'info');
 
   if (!value) {
     log('请选择文件或摄像头', 'error');
@@ -318,7 +322,7 @@ const start = () => {
 
   log(`正在连接: ${kind.value} - ${value}`, 'info');
   isLoading.value = true;
-  connect(kind.value, value);
+  connect(kind.value, value, 'camera-' + selectedCamera.value, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
   // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {

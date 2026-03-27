@@ -170,15 +170,15 @@ class Camera:
 class MatingEvent:
     @staticmethod
     def create(camera_id, pen_id, barn_id, start_time, end_time, duration, avg_confidence, max_confidence, 
-               screenshot1=None, screenshot2=None, screenshot3=None):
+               screenshot=None):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
         INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
-                                 avg_confidence, max_confidence, screenshot1, screenshot2, screenshot3)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 avg_confidence, max_confidence, screenshot)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (camera_id, pen_id, barn_id, start_time, end_time, duration, avg_confidence, max_confidence, 
-              screenshot1, screenshot2, screenshot3))
+              screenshot))
         conn.commit()
         event_id = cursor.lastrowid
         conn.close()
