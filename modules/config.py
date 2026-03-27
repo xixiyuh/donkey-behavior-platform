@@ -40,6 +40,9 @@ COLOR_STANDING = (0, 255, 0)
 COLOR_MATING = (0, 0, 255)
 COLOR_LYING = (255, 0, 0)
 
+# ------- 事件检测参数 -------
+MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
+
 # ------- 摄像头FLV地址配置 -------
 # 格式：{barn_id: {pen_id: [camera1_url, camera2_url, camera3_url]}}
 CAMERA_FLV_URLS = {

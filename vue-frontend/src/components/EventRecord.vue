@@ -61,6 +61,7 @@
             <th>持续时间(秒)</th>
             <th>平均置信度</th>
             <th>最大置信度</th>
+            <th>置信图</th>
             <th>所属摄像头</th>
             <th>所属栏</th>
             <th>所属养殖舍</th>
@@ -74,12 +75,18 @@
             <td>{{ event.duration }}</td>
             <td>{{ event.avg_confidence.toFixed(2) }}</td>
             <td>{{ event.max_confidence.toFixed(2) }}</td>
+            <td>
+              <div class="confidence-image" v-if="event.screenshot1">
+                <img :src="event.screenshot1" alt="置信图" class="screenshot-img" />
+              </div>
+              <div v-else class="no-image">无截图</div>
+            </td>
             <td>{{ event.camera_id }}</td>
             <td>{{ event.pen_id }}</td>
             <td>{{ getBarnName(event.barn_id) }}</td>
           </tr>
           <tr v-if="eventStore.allEvents.length === 0">
-            <td colspan="9" style="text-align: center;">暂无事件数据</td>
+            <td colspan="10" style="text-align: center;">暂无事件数据</td>
           </tr>
         </tbody>
       </table>
@@ -270,15 +277,45 @@ th:nth-child(6), td:nth-child(6) {
 }
 
 th:nth-child(7), td:nth-child(7) {
-  width: 100px;
+  width: 150px;
 }
 
 th:nth-child(8), td:nth-child(8) {
-  width: 80px;
+  width: 100px;
 }
 
 th:nth-child(9), td:nth-child(9) {
+  width: 80px;
+}
+
+th:nth-child(10), td:nth-child(10) {
   width: 100px;
+}
+
+/* 置信图样式 */
+.confidence-image {
+  width: 100%;
+  height: 100px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.screenshot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.no-image {
+  width: 100%;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a2332;
+  border-radius: 4px;
+  color: #888;
+  font-size: 12px;
 }
 
 /* 响应式设计 */
