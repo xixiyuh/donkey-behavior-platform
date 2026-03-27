@@ -15,10 +15,9 @@ export function useWebSocket() {
       ws.value.close();
     }
 
-    const encodedValue = encodeURIComponent(value);
     const qs = new URLSearchParams();
     qs.set('kind', kind);
-    if (encodedValue) qs.set('value', decodeURIComponent(encodedValue));
+    if (value) qs.set('value', value);
 
     // 使用完整的后端WebSocket URL
     const wsUrl = `${WS_BASE_URL}/ws?${qs.toString()}`;

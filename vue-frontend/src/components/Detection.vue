@@ -231,11 +231,11 @@ const triggerFileSelect = () => {
 };
 
 // 文件选择处理
-const handleFileSelect = async (event: Event) => {
+const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement;
   if (input.files && input.files[0]) {
     const file = input.files[0];
-    log(`文件信息: ${JSON.stringify(file)}`, 'info');
+    log(`文件信息: ${file.name} (${file.size} bytes, ${file.type})`, 'info');
 
     // 先断开现有连接，避免冲突
     if (isConnected.value) {
@@ -244,29 +244,32 @@ const handleFileSelect = async (event: Event) => {
       isLoading.value = false;
     }
 
-    // 上传文件
-    const result = await uploadFile(file);
-    if (result.success && result.file_path) {
-      log(`文件上传成功，路径: ${result.file_path}`, 'success');
+    // 上传文件（非阻塞）
+    uploadFile(file).then(result => {
+      if (result.success && result.file_path) {
+        log(`文件上传成功，路径: ${result.file_path}`, 'success');
 
-      // 保存当前文件名，用于后续删除
-      currentFileName.value = file.name;
-      log(`已记录文件名: ${file.name}`, 'info');
+        // 保存当前文件名，用于后续删除
+        currentFileName.value = file.name;
+        log(`已记录文件名: ${file.name}`, 'info');
 
-      // 根据文件类型设置kind
-      if (file.type.startsWith('image/')) {
-        kind.value = 'image';
-        log('设置kind为: image', 'info');
-      } else if (file.type.startsWith('video/')) {
-        kind.value = 'file';
-        log('设置kind为: file', 'info');
+        // 根据文件类型设置kind
+        if (file.type.startsWith('image/')) {
+          kind.value = 'image';
+          log('设置kind为: image', 'info');
+        } else if (file.type.startsWith('video/')) {
+          kind.value = 'file';
+          log('设置kind为: file', 'info');
+        }
+
+        // 启动检测
+        startWithFile(result.file_path);
+      } else {
+        log(`文件上传失败: ${result.message}`, 'error');
       }
-
-      // 启动检测
-      startWithFile(result.file_path);
-    } else {
-      log(`文件上传失败: ${result.message}`, 'error');
-    }
+    }).catch(error => {
+      log(`文件上传失败: ${error instanceof Error ? error.message : '未知错误'}`, 'error');
+    });
   }
 };
 

@@ -23,31 +23,26 @@ from .overlays import put_fps
 
 from backend.api import router as farm_router
 
-# 全局检测器实例和锁
-_detector = None
-_detector_lock = threading.Lock()
-
-
 def get_detector():
-    """线程安全的单例检测器获取"""
-    global _detector
-    if _detector is None:
-        with _detector_lock:
-            if _detector is None:
-                _detector = PTDetector(C.PT_MODEL_PATH)
-                print("Detector initialized successfully", flush=True)
-    return _detector
+    """为每个连接创建一个新的检测器实例"""
+    detector = PTDetector(C.PT_MODEL_PATH)
+    print("Detector initialized successfully for new connection", flush=True)
+    return detector
 
+
+# 全局检测器实例（仅用于预热）
+_detector = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _detector
     print("Starting RK3588 Realtime Detector...")
     try:
-        det = get_detector()
+        _detector = get_detector()
         # 预热模型
         dummy = (np.zeros((C.IMG_SIZE[1], C.IMG_SIZE[0], 3), dtype=np.uint8) + 127)
         try:
-            det.infer_once(dummy)
+            _detector.infer_once(dummy)
             print("Detector pre-warmed successfully")
         except Exception as e:
             print(f"Warning: pre-warm failed: {e}")
@@ -56,7 +51,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    global _detector
     if _detector:
         try:
             if hasattr(_detector, 'release'):
@@ -111,6 +105,8 @@ async def health_check():
 from fastapi import UploadFile, File
 import os
 
+import aiofiles
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
@@ -118,11 +114,11 @@ async def upload_file(file: UploadFile = File(...)):
         upload_dir = C.BASE_DIR / "uploads"
         upload_dir.mkdir(exist_ok=True)
         
-        # 保存文件
+        # 保存文件（使用异步I/O）
         file_path = upload_dir / file.filename
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        content = await file.read()
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(content)
         
         return {"success": True, "file_path": str(file_path)}
     except Exception as e:
@@ -279,18 +275,28 @@ async def ws_endpoint(
             value = unquote(value)
         print(f"[WS] DECODED value = {value}", flush=True)
 
-        stream = open_source(kind, value or "")
+        # 异步打开视频源，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        stream = await loop.run_in_executor(None, lambda: open_source(kind, value or ""))
+
+        # 启动处理线程
         threads = start_pipeline(stream, det, result_queue, stop_event)
 
+        # 异步处理帧数据
         while True:
             try:
-                frame = result_queue.get(timeout=1.0)
-            except queue.Empty:
-                await asyncio.sleep(0.01)
-                continue
+                # 使用非阻塞方式获取帧
+                try:
+                    frame = result_queue.get(block=False)
+                except queue.Empty:
+                    await asyncio.sleep(0.01)
+                    continue
 
-            # 这里会在 WebSocket 断开时抛出异常
-            await ws_manager.send_frame(ws, frame)
+                # 异步发送帧数据
+                await ws_manager.send_frame(ws, frame)
+
+            except asyncio.CancelledError:
+                break
 
     except WebSocketDisconnect:
         print("[WS] Client disconnected", flush=True)
