@@ -257,7 +257,28 @@ const addCamera = async () => {
 const toggleCamera = async (id: number) => {
   try {
     await cameraStore.toggleCameraConfig(id);
+
+    // 加载更新后的配置，检查是否被禁用
     await loadCameraConfigs();
+
+    // 找到该摄像头配置
+    const camera = cameraConfigs.value.find(c => c.id === id);
+    if (camera && !camera.enable) {
+      // 如果被禁用，立即停止检测任务
+      try {
+        const response = await fetch(`http://localhost:8000/api/camera-configs/${id}/stop`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        const result = await response.json();
+        console.log('Stop detection result:', result);
+      } catch (stopErr) {
+        console.error('Error stopping camera detection:', stopErr);
+        // 即使停止失败，也继续执行，因为状态已经更新
+      }
+    }
   } catch (err: any) {
     console.error('Error toggling camera config:', err);
     alert('切换摄像头状态失败: ' + (err.response?.data?.detail || err.message));
@@ -271,6 +292,29 @@ const deleteCamera = async (id: number) => {
   }
 
   try {
+    // 找到该摄像头配置
+    const camera = cameraConfigs.value.find(c => c.id === id);
+    if (camera && camera.enable) {
+      // 如果启用，先禁用
+      await cameraStore.toggleCameraConfig(id);
+
+      // 立即停止检测任务
+      try {
+        const response = await fetch(`http://localhost:8000/api/camera-configs/${id}/stop`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        const result = await response.json();
+        console.log('Stop detection result:', result);
+      } catch (stopErr) {
+        console.error('Error stopping camera detection:', stopErr);
+        // 即使停止失败，也继续执行删除操作
+      }
+    }
+
+    // 删除摄像头配置
     await cameraStore.deleteCameraConfig(id);
     await loadCameraConfigs();
   } catch (err: any) {
@@ -322,14 +366,14 @@ const handleCameraChange = async () => {
       newCamera.value.camera_id = camera.camera_id;
       newCamera.value.flv_url = camera.flv_url;
       newCamera.value.barn_id = camera.barn_id.toString();
-      
+
       // 保存摄像头的pen_id
       const cameraPenId = camera.pen_id.toString();
-      
+
       // 触发栏列表更新
       console.log('Triggering pen list update for barn:', camera.barn_id);
       await loadPens();
-      
+
       // 恢复摄像头的pen_id
       newCamera.value.pen_id = cameraPenId;
       console.log('After loading pens, pen_id:', newCamera.value.pen_id);

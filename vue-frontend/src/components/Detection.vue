@@ -53,11 +53,11 @@
         >
           <option value="">请选择摄像头</option>
           <option
-            v-for="(camera, index) in cameras"
-            :key="index"
+            v-for="camera in cameras"
+            :key="camera.id"
             :value="camera.flv_url"
           >
-            摄像头 {{ index + 1 }}
+            {{ camera.camera_id }}
           </option>
         </select>
       </div>

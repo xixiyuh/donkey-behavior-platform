@@ -18,7 +18,7 @@ PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detecto
 # 例如：PT_MODEL_PATH = r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt"
 
 # ------- 本地流水线 / WS -------
-MAX_FPS = 30            # 本地接收最大帧率
+MAX_FPS = 20            # 本地接收最大帧率
 FRAME_INTERVAL = 1      # 1表示每秒都做检测
 JPEG_QUALITY = 60       # JPEG质量，值越高质量越好（0-100）
 QUEUE_MAX = 2            # 本地流水线队列最大帧数

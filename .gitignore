@@ -74,3 +74,6 @@ mpvpipe_debug.log
 
 # Upload files
 uploads/
+
+# Screenshots
+static/mating_screenshots/

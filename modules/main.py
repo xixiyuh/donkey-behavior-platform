@@ -20,19 +20,23 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 
+# 生成时间戳格式
+def get_timestamp():
+    return datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+
 import modules.config as C
 from .detector_pt import PTDetector
 from .streams import open_source
 from .websocket_manager import WSManager
 from .overlays import put_fps
 
-from backend.api import router as farm_router
+from backend.api import router as farm_router, register_start_detection_func, register_stop_detection_func
 from backend.models import CameraConfig
 
 def get_detector():
     """为每个连接创建一个新的检测器实例"""
     detector = PTDetector(C.PT_MODEL_PATH)
-    print("Detector initialized successfully for new connection", flush=True)
+    print(f"{get_timestamp()} Detector initialized successfully for new connection", flush=True)
     return detector
 
 
@@ -42,19 +46,19 @@ _detector = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _detector
-    print("Starting RK3588 Realtime Detector...")
+    print(f"{get_timestamp()} Starting RK3588 Realtime Detector...")
     try:
         _detector = get_detector()
         # 预热模型
         dummy = (np.zeros((C.IMG_SIZE[1], C.IMG_SIZE[0], 3), dtype=np.uint8) + 127)
         try:
             _detector.infer_once(dummy)
-            print("Detector pre-warmed successfully")
+            print(f"{get_timestamp()} Detector pre-warmed successfully")
         except Exception as e:
-            print(f"Warning: pre-warm failed: {e}")
+            print(f"{get_timestamp()} Warning: pre-warm failed: {e}")
         
         # 启动调度器
-        print("Starting scheduler...")
+        print(f"{get_timestamp()} Starting scheduler...")
         # 每天9:00启动检测
         scheduler.add_job(
             start_all_detections,
@@ -70,28 +74,32 @@ async def lifespan(app: FastAPI):
             replace_existing=True
         )
         scheduler.start()
-        print("Scheduler started successfully")
+        print(f"{get_timestamp()} Scheduler started successfully")
+        
+        # 立即启动所有启用的摄像头检测
+        print(f"{get_timestamp()} Starting all enabled camera detections immediately...")
+        start_all_detections()
     except Exception as e:
-        print(f"Warning: Failed to pre-load detector: {e}")
+        print(f"{get_timestamp()} Warning: Failed to pre-load detector: {e}")
 
     yield
 
     # 停止调度器
-    print("Stopping scheduler...")
+    print(f"{get_timestamp()} Stopping scheduler...")
     try:
         scheduler.shutdown()
-        print("Scheduler stopped successfully")
+        print(f"{get_timestamp()} Scheduler stopped successfully")
     except Exception as e:
-        print(f"Warning during scheduler shutdown: {e}")
+        print(f"{get_timestamp()} Warning during scheduler shutdown: {e}")
 
     if _detector:
         try:
             if hasattr(_detector, 'release'):
                 _detector.release()
             _detector = None
-            print("Realtime Detector shutdown gracefully")
+            print(f"{get_timestamp()} Realtime Detector shutdown gracefully")
         except Exception as e:
-            print(f"Warning during shutdown: {e}")
+            print(f"{get_timestamp()} Warning during shutdown: {e}")
 
 
 app = FastAPI(title="Realtime Detector", version="1.0.0", lifespan=lifespan)
@@ -121,7 +129,7 @@ scheduler = BackgroundScheduler()
 # 摄像头检测管理
 class CameraDetectionManager:
     def __init__(self):
-        self.active_detections = {}
+        self.active_detections = {}  # 存储 (thread, stop_event) 元组
         self.lock = threading.Lock()
     
     def start_detection(self, camera_config):
@@ -130,15 +138,16 @@ class CameraDetectionManager:
         
         with self.lock:
             if config_id in self.active_detections:
-                print(f"[Detection] Camera {config_id} is already running")
+                print(f"{get_timestamp()} [Detection] Camera {config_id} is already running")
                 return
         
         # 创建检测线程
+        stop_event = threading.Event()
+        
         def detection_thread():
-            print(f"[Detection] Starting detection for camera {config_id}: {camera_config['camera_id']}")
+            print(f"{get_timestamp()} [Detection] Starting detection for camera {config_id}: {camera_config['camera_id']}")
             
             stream = None
-            stop_event = threading.Event()
             result_queue = queue.Queue(maxsize=C.QUEUE_MAX)
             
             try:
@@ -158,9 +167,9 @@ class CameraDetectionManager:
                     time.sleep(1)
                     
             except Exception as e:
-                print(f"[Detection] Error for camera {config_id}: {e}")
+                print(f"{get_timestamp()} [Detection] Error for camera {config_id}: {e}")
             finally:
-                print(f"[Detection] Stopping detection for camera {config_id}")
+                print(f"{get_timestamp()} [Detection] Stopping detection for camera {config_id}")
                 
                 # 停止后台线程
                 stop_event.set()
@@ -170,7 +179,7 @@ class CameraDetectionManager:
                     try:
                         stream.release()
                     except Exception as e:
-                        print(f"[Detection] Error releasing stream: {e}")
+                        print(f"{get_timestamp()} [Detection] Error releasing stream: {e}")
                 
                 with self.lock:
                     if config_id in self.active_detections:
@@ -181,16 +190,17 @@ class CameraDetectionManager:
         thread.start()
         
         with self.lock:
-            self.active_detections[config_id] = thread
+            self.active_detections[config_id] = (thread, stop_event)
         
-        print(f"[Detection] Started detection for camera {config_id}")
+        print(f"{get_timestamp()} [Detection] Started detection for camera {config_id}")
     
     def stop_detection(self, config_id):
         """停止单个摄像头的检测"""
         with self.lock:
             if config_id in self.active_detections:
-                # 线程会自动结束，因为我们只是标记它
-                print(f"[Detection] Scheduled stop for camera {config_id}")
+                thread, stop_event = self.active_detections[config_id]
+                stop_event.set()
+                print(f"{get_timestamp()} [Detection] Stopping camera {config_id}")
     
     def stop_all_detections(self):
         """停止所有摄像头的检测"""
@@ -200,28 +210,42 @@ class CameraDetectionManager:
         for config_id in config_ids:
             self.stop_detection(config_id)
         
-        print("[Detection] Stopped all detections")
+        print(f"{get_timestamp()} [Detection] Stopped all detections")
 
 # 创建摄像头检测管理器
 detection_manager = CameraDetectionManager()
 
+# 注册启动检测的函数
+def start_detection_wrapper(config):
+    """启动检测的包装函数"""
+    detection_manager.start_detection(config)
+
+# 注册停止检测的函数
+def stop_detection_wrapper(config_id):
+    """停止检测的包装函数"""
+    detection_manager.stop_detection(config_id)
+
+# 注册到后端API
+register_start_detection_func(start_detection_wrapper)
+register_stop_detection_func(stop_detection_wrapper)
+
 # 定时任务函数
 def start_all_detections():
     """启动所有启用的摄像头检测"""
-    print(f"[Scheduler] Starting all detections at {datetime.now()}")
+    print(f"{get_timestamp()} [Scheduler] Starting all detections")
     
     try:
         configs = CameraConfig.get_enabled()
-        print(f"[Scheduler] Found {len(configs)} enabled cameras")
+        print(f"{get_timestamp()} [Scheduler] Found {len(configs)} enabled cameras")
         
         for config in configs:
             detection_manager.start_detection(config)
     except Exception as e:
-        print(f"[Scheduler] Error starting detections: {e}")
+        print(f"{get_timestamp()} [Scheduler] Error starting detections: {e}")
 
 def stop_all_detections():
     """停止所有摄像头检测"""
-    print(f"[Scheduler] Stopping all detections at {datetime.now()}")
+    print(f"{get_timestamp()} [Scheduler] Stopping all detections")
     detection_manager.stop_all_detections()
 
 
@@ -289,6 +313,18 @@ async def delete_uploaded_file(filename: str):
         return {"success": False, "message": str(e)}
 
 
+@app.post("/api/camera-configs/{config_id}/stop")
+async def stop_camera_detection(config_id: int):
+    """立即停止指定摄像头的检测任务"""
+    try:
+        print(f"{get_timestamp()} [API] Stopping camera detection for config ID: {config_id}")
+        detection_manager.stop_detection(config_id)
+        return {"success": True, "message": f"Camera detection stopped for config ID {config_id}"}
+    except Exception as e:
+        print(f"{get_timestamp()} [API] Error stopping camera detection: {e}")
+        return {"success": False, "message": str(e)}
+
+
 
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
@@ -306,14 +342,14 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                     consecutive_failures = 0
 
                 if time.time() - last > 1:
-                    print(f"READER fps≈{cnt}, ok={ok}, frame={'None' if frame is None else frame.shape}", flush=True)
+                    print(f"{get_timestamp()} READER fps≈{cnt}, ok={ok}, frame={'None' if frame is None else frame.shape}", flush=True)
                     cnt = 0
                     last = time.time()
 
                 if not ok or frame is None:
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
-                        print("[READER] Stream ended, setting stop event", flush=True)
+                        print(f"{get_timestamp()} [READER] Stream ended, setting stop event", flush=True)
                         stop_event.set()
                         break
                     time.sleep(0.02)
@@ -330,16 +366,16 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                 except queue.Full:
                     pass
         except Exception as e:
-            print(f"READER thread error: {e}", flush=True)
+            print(f"{get_timestamp()} READER thread error: {e}", flush=True)
         finally:
-            print("READER thread stopped", flush=True)
+            print(f"{get_timestamp()} READER thread stopped", flush=True)
             # 确保流资源被释放
             try:
                 if hasattr(stream, 'release'):
                     stream.release()
-                    print("[READER] Stream released in finally block", flush=True)
+                    print(f"{get_timestamp()} [READER] Stream released in finally block", flush=True)
             except Exception as e:
-                print(f"[READER] Error releasing stream in finally: {e}", flush=True)
+                print(f"{get_timestamp()} [READER] Error releasing stream in finally: {e}", flush=True)
 
     def infer():
         last_fps = 0.0
@@ -365,7 +401,7 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
 
                 except Exception as e:
                     warn = f"INFER ERROR: {type(e).__name__}: {e}"
-                    print(warn, flush=True)
+                    print(f"{get_timestamp()} {warn}", flush=True)
                     cv2.putText(frame, warn, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
                 # 只保留最新结果
@@ -381,9 +417,9 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
 
                 idx += 1
         except Exception as e:
-            print(f"INFER thread error: {e}", flush=True)
+            print(f"{get_timestamp()} INFER thread error: {e}", flush=True)
         finally:
-            print("INFER thread stopped", flush=True)
+            print(f"{get_timestamp()} INFER thread stopped", flush=True)
 
     t_reader = threading.Thread(target=reader, daemon=True)
     t_infer = threading.Thread(target=infer, daemon=True)
@@ -405,7 +441,7 @@ async def ws_endpoint(
     await ws.accept()
     await ws_manager.register(ws)
 
-    print(f"[WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", flush=True)
+    print(f"{get_timestamp()} [WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", flush=True)
 
     stream = None
     stop_event = threading.Event()
@@ -418,7 +454,7 @@ async def ws_endpoint(
         # 前端是 urlencode 过的,这里必须 decode
         if value is not None:
             value = unquote(value)
-        print(f"[WS] DECODED value = {value}", flush=True)
+        print(f"{get_timestamp()} [WS] DECODED value = {value}", flush=True)
 
         # 异步打开视频源，避免阻塞事件循环
         loop = asyncio.get_event_loop()
@@ -431,7 +467,7 @@ async def ws_endpoint(
             stream.pen_id = pen_id
         if barn_id:
             stream.barn_id = barn_id
-        print(f"[WS] Stream configured: camera_id={stream.camera_id if hasattr(stream, 'camera_id') else None}, pen_id={stream.pen_id if hasattr(stream, 'pen_id') else None}, barn_id={stream.barn_id if hasattr(stream, 'barn_id') else None}", flush=True)
+        print(f"{get_timestamp()} [WS] Stream configured: camera_id={stream.camera_id if hasattr(stream, 'camera_id') else None}, pen_id={stream.pen_id if hasattr(stream, 'pen_id') else None}, barn_id={stream.barn_id if hasattr(stream, 'barn_id') else None}", flush=True)
 
         # 启动处理线程
         threads = start_pipeline(stream, det, result_queue, stop_event)
@@ -453,15 +489,15 @@ async def ws_endpoint(
                 break
 
     except WebSocketDisconnect:
-        print("[WS] Client disconnected", flush=True)
+        print(f"{get_timestamp()} [WS] Client disconnected", flush=True)
     except Exception as e:
-        print(f"[WS] Error: {type(e).__name__}: {e}", flush=True)
+        print(f"{get_timestamp()} [WS] Error: {type(e).__name__}: {e}", flush=True)
         try:
             await ws.send_text(f"ERROR::{repr(e)}\n{traceback.format_exc()}")
         except Exception:
             pass
     finally:
-        print("[WS] Cleaning up...", flush=True)
+        print(f"{get_timestamp()} [WS] Cleaning up...", flush=True)
 
         # 1. 停止后台线程
         stop_event.set()
@@ -473,15 +509,15 @@ async def ws_endpoint(
                 if t and t.is_alive():
                     t.join(timeout=2.0)
                     if t.is_alive():
-                        print(f"[WS] Warning: {name} thread still alive after timeout", flush=True)
+                        print(f"{get_timestamp()} [WS] Warning: {name} thread still alive after timeout", flush=True)
 
         # 3. 释放流资源
         if stream:
             try:
                 stream.release()
-                print("[WS] Stream released", flush=True)
+                print(f"{get_timestamp()} [WS] Stream released", flush=True)
             except Exception as e:
-                print(f"[WS] Error releasing stream: {e}", flush=True)
+                print(f"{get_timestamp()} [WS] Error releasing stream: {e}", flush=True)
 
         # 4. 注销 WebSocket
         await ws_manager.unregister(ws)
@@ -492,4 +528,4 @@ async def ws_endpoint(
         except Exception:
             pass
 
-        print("[WS] Cleanup complete", flush=True)
+        print(f"{get_timestamp()} [WS] Cleanup complete", flush=True)

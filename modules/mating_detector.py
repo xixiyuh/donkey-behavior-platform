@@ -15,7 +15,7 @@ class MatingDetector:
     
     def detect_mating(self, frame, detections, camera_id, pen_id, barn_id):
         """
-        检测mating事件并记录
+        检测standing事件并记录
         
         Args:
             frame: 当前帧
@@ -28,30 +28,30 @@ class MatingDetector:
         self.check_timeout_events()
         
         # 打印检测结果
-        print(f"Received detections: {len(detections)} objects")
+        print(f"[DETECTION] Received {len(detections)} objects for camera {camera_id}, pen {pen_id}, barn {barn_id}")
         for d in detections:
-            print(f"  - {d['class']} (conf: {d['confidence']:.2f}, track_id: {d.get('track_id')})")
+            print(f"[DETECTION]   - {d['class']} (conf: {d['confidence']:.2f}, track_id: {d.get('track_id')})")
         
-        # 过滤出mating类型的检测结果
-        mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
-        print(f"Filtered mating detections: {len(mating_detections)} (confidence threshold: {MATING_CONF_THRES})")
+        # 过滤出standing类型的检测结果
+        standing_detections = [d for d in detections if d['class'] == 'standing' and d['confidence'] > MATING_CONF_THRES]
+        print(f"[DETECTION] Filtered standing detections: {len(standing_detections)} (confidence threshold: {MATING_CONF_THRES})")
         
-        # 检查是否有mating事件
-        if mating_detections:
-            # 为每个mating检测结果创建或更新事件
-            for detection in mating_detections:
-                # 使用track_id来区分不同的mating事件
+        # 检查是否有standing事件
+        if standing_detections:
+            # 为每个standing检测结果创建或更新事件
+            for detection in standing_detections:
+                # 使用track_id来区分不同的standing事件
                 track_id = detection.get('track_id')
                 print(f"Processing detection with track_id: {track_id}")
                 if track_id is not None:
-                    # 构建事件键，包含track_id以区分不同的mating事件
+                    # 构建事件键，包含track_id以区分不同的standing事件
                     # 优化事件键，使用简洁的标识符
                     camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id else 'unknown'
                     event_key = f"{camera_key}_{pen_id}_{barn_id}_{track_id}"
                     print(f"Event key: {event_key}")
                     
                     if event_key not in self.current_mating_events:
-                        # 开始新的mating事件
+                        # 开始新的standing事件
                         print(f"Starting new event: {event_key}")
                         self.current_mating_events[event_key] = {
                             'start_time': datetime.now(),
@@ -65,7 +65,7 @@ class MatingDetector:
                         # 保存第一张截图
                         self.save_screenshot(frame, detection, event_key, 0)
                     else:
-                        # 更新现有的mating事件
+                        # 更新现有的standing事件
                         event = self.current_mating_events[event_key]
                         event['detections'].append(detection)
                         print(f"Updating event: {event_key}, detection count: {len(event['detections'])}")
@@ -83,7 +83,7 @@ class MatingDetector:
                                     min_idx = np.argmin(current_confidences)
                                     self.save_screenshot(frame, detection, event_key, min_idx)
         else:
-            # 没有mating检测结果，检查是否有正在进行的mating事件需要结束
+            # 没有standing检测结果，检查是否有正在进行的standing事件需要结束
             # 构建基础事件键前缀
             base_event_key = f"{camera_id}_{pen_id}_{barn_id}_"
             # 找出所有以该前缀开头的事件键
@@ -151,7 +151,7 @@ class MatingDetector:
         
         # 检查事件持续时间是否达到阈值
         if duration < MATING_EVENT_MIN_DURATION:
-            print(f"Mating event skipped (duration too short): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s")
+            print(f"Standing event skipped (duration too short): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s")
             return
         
         # 计算平均置信度和最大置信度
@@ -184,7 +184,7 @@ class MatingDetector:
                   screenshot))
             conn.commit()
             conn.close()
-            print(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
+            print(f"Standing event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
         except Exception as e:
             print(f"Error recording event: {e}")
     

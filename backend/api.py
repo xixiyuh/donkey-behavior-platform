@@ -9,6 +9,30 @@ from .schemas import Camera as CameraSchema, CameraCreate, CameraUpdate
 from .schemas import MatingEvent as MatingEventSchema, MatingEventCreate
 from .schemas import CameraConfig as CameraConfigSchema, CameraConfigCreate
 
+# 全局变量，用于存储启动和停止检测的函数
+_start_detection_func = None
+_stop_detection_func = None
+
+def register_start_detection_func(func):
+    """注册启动检测的函数"""
+    global _start_detection_func
+    _start_detection_func = func
+
+def register_stop_detection_func(func):
+    """注册停止检测的函数"""
+    global _stop_detection_func
+    _stop_detection_func = func
+
+def start_camera_detection(config):
+    """启动摄像头检测"""
+    if _start_detection_func:
+        _start_detection_func(config)
+
+def stop_camera_detection(config_id):
+    """停止摄像头检测"""
+    if _stop_detection_func:
+        _stop_detection_func(config_id)
+
 router = APIRouter(prefix="/api", tags=["farm"])
 
 # 养殖舍相关API
@@ -342,6 +366,10 @@ def create_camera_config(config: CameraConfigCreate):
     created_config = CameraConfig.get_by_id(config_id)
     if not created_config:
         raise HTTPException(status_code=404, detail="Camera config not created")
+    
+    # 启动摄像头检测（新创建的配置默认是启用状态）
+    start_camera_detection(created_config)
+    
     return {
         "id": created_config["id"],
         "camera_id": created_config["camera_id"],
@@ -371,7 +399,24 @@ def get_camera_configs():
 
 @router.patch("/camera-configs/{config_id}/toggle")
 def toggle_camera_config(config_id: int):
+    # 先获取当前状态
+    current_config = CameraConfig.get_by_id(config_id)
+    if not current_config:
+        raise HTTPException(status_code=404, detail="Camera config not found")
+    
+    # 切换状态
     CameraConfig.toggle(config_id)
+    
+    # 获取切换后的状态
+    updated_config = CameraConfig.get_by_id(config_id)
+    if updated_config:
+        if updated_config["enable"] == 1:
+            # 如果切换后是启用状态，启动检测
+            start_camera_detection(updated_config)
+        else:
+            # 如果切换后是禁用状态，停止检测
+            stop_camera_detection(config_id)
+    
     return {"message": "Camera config toggled successfully"}
 
 @router.delete("/camera-configs/{config_id}")
