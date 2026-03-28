@@ -51,3 +51,16 @@ export interface UploadResponse {
   file_path?: string;
   message?: string;
 }
+
+// 摄像头配置类型
+export interface CameraConfig {
+  id: number;
+  camera_id: string;
+  flv_url: string;
+  barn_id: number;
+  pen_id: number;
+  start_time: string;
+  end_time: string;
+  enable: number;
+  created_at?: string;
+}

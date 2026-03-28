@@ -20,3 +20,4 @@ aiofiles
 
 # 其他
 requests
+apscheduler

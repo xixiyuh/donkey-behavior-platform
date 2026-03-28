@@ -51,9 +51,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
+import { usePenStore } from '../stores/pen';
+import { useCameraStore } from '../stores/camera';
 import type { Barn } from '../types';
 
 const barnStore = useBarnStore();
+const penStore = usePenStore();
+const cameraStore = useCameraStore();
 
 const barnForm = ref({
   name: '',
@@ -94,11 +98,37 @@ const editBarn = (barn: Barn) => {
 };
 
 const deleteBarn = async (barnId: number) => {
-  if (!confirm('确定要删除这个养殖舍吗？')) {
-    return;
-  }
-
   try {
+    // 加载所有栏和摄像头数据
+    await penStore.fetchPens();
+    await cameraStore.fetchCameras();
+
+    // 检查该养殖舍是否有栏
+    const barnPens = penStore.allPens.filter(pen => pen.barn_id === barnId);
+    const penCount = barnPens.length;
+
+    if (penCount > 0) {
+      // 检查这些栏是否有摄像头
+      const penIds = barnPens.map(pen => pen.id);
+      const barnCameras = cameraStore.allCameras.filter(camera => penIds.includes(camera.pen_id));
+      const cameraCount = barnCameras.length;
+
+      // 弹出确认提示
+      const confirmMessage = `这个养殖舍下还有 ${penCount} 个栏，` +
+                           (cameraCount > 0 ? `这些栏中有 ${cameraCount} 个摄像头，` : '') +
+                           '确定要删除这个养殖舍及其所有栏和摄像头吗？';
+
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+    } else {
+      // 没有栏时的普通确认
+      if (!confirm('确定要删除这个养殖舍吗？')) {
+        return;
+      }
+    }
+
+    // 执行删除
     await barnStore.deleteBarn(barnId);
   } catch (err: any) {
     barnStore.error = err.response?.data?.detail || '删除养殖舍失败';
@@ -219,11 +249,11 @@ th:nth-child(4), td:nth-child(4) {
   .form-row {
     grid-template-columns: 1fr;
   }
-  
+
   .buttons {
     flex-direction: column;
   }
-  
+
   button {
     width: 100%;
   }

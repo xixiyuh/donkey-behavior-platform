@@ -44,7 +44,22 @@ class Barn:
     def delete(barn_id):
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # 先获取该养殖舍下的所有栏
+        cursor.execute('SELECT id FROM pens WHERE barn_id = ?', (barn_id,))
+        pen_ids = [pen[0] for pen in cursor.fetchall()]
+        
+        # 删除这些栏下的所有摄像头
+        if pen_ids:
+            placeholders = ','.join(['?'] * len(pen_ids))
+            cursor.execute(f'DELETE FROM cameras WHERE pen_id IN ({placeholders})', pen_ids)
+        
+        # 删除该养殖舍下的所有栏
+        cursor.execute('DELETE FROM pens WHERE barn_id = ?', (barn_id,))
+        
+        # 最后删除养殖舍本身
         cursor.execute('DELETE FROM barns WHERE id = ?', (barn_id,))
+        
         conn.commit()
         conn.close()
 
@@ -98,7 +113,13 @@ class Pen:
     def delete(pen_id):
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # 先删除该栏下的所有摄像头
+        cursor.execute('DELETE FROM cameras WHERE pen_id = ?', (pen_id,))
+        
+        # 然后删除栏本身
         cursor.execute('DELETE FROM pens WHERE id = ?', (pen_id,))
+        
         conn.commit()
         conn.close()
 
@@ -219,3 +240,65 @@ class MatingEvent:
         events = cursor.fetchall()
         conn.close()
         return events
+
+class CameraConfig:
+    @staticmethod
+    def create(camera_id, flv_url, barn_id, pen_id, start_time='09:00', end_time='19:00'):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+        INSERT INTO camera_configs (camera_id, flv_url, barn_id, pen_id, start_time, end_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (camera_id, flv_url, barn_id, pen_id, start_time, end_time))
+        conn.commit()
+        config_id = cursor.lastrowid
+        conn.close()
+        return config_id
+    
+    @staticmethod
+    def get_all():
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM camera_configs')
+        configs = cursor.fetchall()
+        conn.close()
+        return configs
+    
+    @staticmethod
+    def get_enabled():
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM camera_configs WHERE enable = 1')
+        configs = cursor.fetchall()
+        conn.close()
+        return configs
+    
+    @staticmethod
+    def toggle(id):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # 获取当前状态
+        cursor.execute('SELECT enable FROM camera_configs WHERE id = ?', (id,))
+        result = cursor.fetchone()
+        if result:
+            new_state = 0 if result[0] == 1 else 1
+            cursor.execute('UPDATE camera_configs SET enable = ? WHERE id = ?', (new_state, id))
+            conn.commit()
+        conn.close()
+    
+    @staticmethod
+    def get_by_id(id):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM camera_configs WHERE id = ?', (id,))
+        config = cursor.fetchone()
+        conn.close()
+        return config
+    
+    @staticmethod
+    def delete(id):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM camera_configs WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()

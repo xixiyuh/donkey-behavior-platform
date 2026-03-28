@@ -2,11 +2,12 @@
 import sqlite3
 from fastapi import APIRouter, HTTPException
 from typing import List
-from .models import Barn, Pen, Camera, MatingEvent
+from .models import Barn, Pen, Camera, MatingEvent, CameraConfig
 from .schemas import Barn as BarnSchema, BarnCreate, BarnUpdate
 from .schemas import Pen as PenSchema, PenCreate, PenUpdate
 from .schemas import Camera as CameraSchema, CameraCreate, CameraUpdate
 from .schemas import MatingEvent as MatingEventSchema, MatingEventCreate
+from .schemas import CameraConfig as CameraConfigSchema, CameraConfigCreate
 
 router = APIRouter(prefix="/api", tags=["farm"])
 
@@ -330,3 +331,50 @@ def get_mating_events_by_barn(barn_id: int):
         "screenshot": event["screenshot"],
         "created_at": event["created_at"]
     } for event in events]
+
+# 摄像头配置相关API
+@router.post("/camera-configs", response_model=CameraConfigSchema)
+def create_camera_config(config: CameraConfigCreate):
+    config_id = CameraConfig.create(
+        config.camera_id, config.flv_url, config.barn_id, config.pen_id,
+        config.start_time, config.end_time
+    )
+    created_config = CameraConfig.get_by_id(config_id)
+    if not created_config:
+        raise HTTPException(status_code=404, detail="Camera config not created")
+    return {
+        "id": created_config["id"],
+        "camera_id": created_config["camera_id"],
+        "flv_url": created_config["flv_url"],
+        "barn_id": created_config["barn_id"],
+        "pen_id": created_config["pen_id"],
+        "start_time": created_config["start_time"],
+        "end_time": created_config["end_time"],
+        "enable": created_config["enable"],
+        "created_at": created_config["created_at"]
+    }
+
+@router.get("/camera-configs", response_model=List[CameraConfigSchema])
+def get_camera_configs():
+    configs = CameraConfig.get_all()
+    return [{
+        "id": config["id"],
+        "camera_id": config["camera_id"],
+        "flv_url": config["flv_url"],
+        "barn_id": config["barn_id"],
+        "pen_id": config["pen_id"],
+        "start_time": config["start_time"],
+        "end_time": config["end_time"],
+        "enable": config["enable"],
+        "created_at": config["created_at"]
+    } for config in configs]
+
+@router.patch("/camera-configs/{config_id}/toggle")
+def toggle_camera_config(config_id: int):
+    CameraConfig.toggle(config_id)
+    return {"message": "Camera config toggled successfully"}
+
+@router.delete("/camera-configs/{config_id}")
+def delete_camera_config(config_id: int):
+    CameraConfig.delete(config_id)
+    return {"message": "Camera config deleted successfully"}

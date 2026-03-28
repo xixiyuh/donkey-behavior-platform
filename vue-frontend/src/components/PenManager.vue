@@ -78,10 +78,12 @@
 import { ref, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
+import { useCameraStore } from '../stores/camera';
 import type { Barn, Pen } from '../types';
 
 const barnStore = useBarnStore();
 const penStore = usePenStore();
+const cameraStore = useCameraStore();
 
 const penForm = ref({
   barn_id: '',
@@ -147,11 +149,11 @@ const createPen = async () => {
       barn_id: parseInt(penForm.value.barn_id.toString()),
     });
 
-    // 重置表单
-    penForm.value = {
-      barn_id: '',
-      pen_number: 1,
-    };
+    // 只重置栏编号，保持养殖舍选择
+    penForm.value.pen_number = 1;
+
+    // 重新加载栏列表
+    await loadPens();
   } catch (err: any) {
     penStore.error = err.response?.data?.detail || '创建栏失败';
   }
@@ -165,12 +167,32 @@ const editPen = (pen: Pen) => {
 
 // 删除栏
 const deletePen = async (penId: number) => {
-  if (!confirm('确定要删除这个栏吗？')) {
-    return;
-  }
-
   try {
+    // 加载所有摄像头数据
+    await cameraStore.fetchCameras();
+
+    // 检查该栏是否有摄像头
+    const penCameras = cameraStore.allCameras.filter(camera => camera.pen_id === penId);
+    const cameraCount = penCameras.length;
+
+    if (cameraCount > 0) {
+      // 弹出确认提示
+      const confirmMessage = `这个栏下还有 ${cameraCount} 个摄像头，确定要删除这个栏及其所有摄像头吗？`;
+
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+    } else {
+      // 没有摄像头时的普通确认
+      if (!confirm('确定要删除这个栏吗？')) {
+        return;
+      }
+    }
+
+    // 执行删除
     await penStore.deletePen(penId);
+    // 重新加载栏列表
+    await loadPens();
   } catch (err: any) {
     penStore.error = err.response?.data?.detail || '删除栏失败';
   }

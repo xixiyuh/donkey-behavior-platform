@@ -207,14 +207,12 @@ const createCamera = async () => {
       flv_url: cameraForm.value.flv_url,
     });
 
-    // 重置表单
-    cameraForm.value = {
-      barn_id: '',
-      pen_id: '',
-      camera_id: '',
-      flv_url: '',
-    };
-    pens.value = [];
+    // 只重置摄像头标识和FLV地址，保持养殖舍和栏选择
+    cameraForm.value.camera_id = '';
+    cameraForm.value.flv_url = '';
+
+    // 重新加载摄像头列表
+    await loadCameras();
   } catch (err: any) {
     cameraStore.error = err.response?.data?.detail || '创建摄像头失败';
   }
@@ -234,6 +232,8 @@ const deleteCamera = async (cameraId: number) => {
 
   try {
     await cameraStore.deleteCamera(cameraId);
+    // 重新加载摄像头列表
+    await loadCameras();
   } catch (err: any) {
     cameraStore.error = err.response?.data?.detail || '删除摄像头失败';
   }

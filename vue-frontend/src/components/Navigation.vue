@@ -6,6 +6,7 @@
       <router-link to="/barns" class="nav-link">养殖舍管理</router-link>
       <router-link to="/pens" class="nav-link">栏管理</router-link>
       <router-link to="/cameras" class="nav-link">摄像头管理</router-link>
+      <router-link to="/camera-configs" class="nav-link">摄像头配置</router-link>
       <router-link to="/events" class="nav-link">事件记录</router-link>
     </div>
   </nav>

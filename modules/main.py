@@ -15,6 +15,11 @@ import time
 import numpy as np
 import cv2
 
+# 导入定时任务库
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from datetime import datetime
+
 import modules.config as C
 from .detector_pt import PTDetector
 from .streams import open_source
@@ -22,6 +27,7 @@ from .websocket_manager import WSManager
 from .overlays import put_fps
 
 from backend.api import router as farm_router
+from backend.models import CameraConfig
 
 def get_detector():
     """为每个连接创建一个新的检测器实例"""
@@ -46,10 +52,37 @@ async def lifespan(app: FastAPI):
             print("Detector pre-warmed successfully")
         except Exception as e:
             print(f"Warning: pre-warm failed: {e}")
+        
+        # 启动调度器
+        print("Starting scheduler...")
+        # 每天9:00启动检测
+        scheduler.add_job(
+            start_all_detections,
+            CronTrigger(hour=9, minute=0),
+            id='start_detection',
+            replace_existing=True
+        )
+        # 每天19:00停止检测
+        scheduler.add_job(
+            stop_all_detections,
+            CronTrigger(hour=19, minute=0),
+            id='stop_detection',
+            replace_existing=True
+        )
+        scheduler.start()
+        print("Scheduler started successfully")
     except Exception as e:
         print(f"Warning: Failed to pre-load detector: {e}")
 
     yield
+
+    # 停止调度器
+    print("Stopping scheduler...")
+    try:
+        scheduler.shutdown()
+        print("Scheduler stopped successfully")
+    except Exception as e:
+        print(f"Warning during scheduler shutdown: {e}")
 
     if _detector:
         try:
@@ -81,6 +114,115 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.include_router(farm_router)
 
 ws_manager = WSManager(max_fps=C.MAX_FPS)
+
+# 后台调度器
+scheduler = BackgroundScheduler()
+
+# 摄像头检测管理
+class CameraDetectionManager:
+    def __init__(self):
+        self.active_detections = {}
+        self.lock = threading.Lock()
+    
+    def start_detection(self, camera_config):
+        """启动单个摄像头的检测"""
+        config_id = camera_config['id']
+        
+        with self.lock:
+            if config_id in self.active_detections:
+                print(f"[Detection] Camera {config_id} is already running")
+                return
+        
+        # 创建检测线程
+        def detection_thread():
+            print(f"[Detection] Starting detection for camera {config_id}: {camera_config['camera_id']}")
+            
+            stream = None
+            stop_event = threading.Event()
+            result_queue = queue.Queue(maxsize=C.QUEUE_MAX)
+            
+            try:
+                det = get_detector()
+                stream = open_source('flv', camera_config['flv_url'])
+                
+                # 设置摄像头、栏和舍的ID
+                stream.camera_id = camera_config['camera_id']
+                stream.pen_id = camera_config['pen_id']
+                stream.barn_id = camera_config['barn_id']
+                
+                # 启动处理线程
+                t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                
+                # 持续运行，直到停止事件被设置
+                while not stop_event.is_set():
+                    time.sleep(1)
+                    
+            except Exception as e:
+                print(f"[Detection] Error for camera {config_id}: {e}")
+            finally:
+                print(f"[Detection] Stopping detection for camera {config_id}")
+                
+                # 停止后台线程
+                stop_event.set()
+                
+                # 释放流资源
+                if stream:
+                    try:
+                        stream.release()
+                    except Exception as e:
+                        print(f"[Detection] Error releasing stream: {e}")
+                
+                with self.lock:
+                    if config_id in self.active_detections:
+                        del self.active_detections[config_id]
+        
+        # 启动检测线程
+        thread = threading.Thread(target=detection_thread, daemon=True)
+        thread.start()
+        
+        with self.lock:
+            self.active_detections[config_id] = thread
+        
+        print(f"[Detection] Started detection for camera {config_id}")
+    
+    def stop_detection(self, config_id):
+        """停止单个摄像头的检测"""
+        with self.lock:
+            if config_id in self.active_detections:
+                # 线程会自动结束，因为我们只是标记它
+                print(f"[Detection] Scheduled stop for camera {config_id}")
+    
+    def stop_all_detections(self):
+        """停止所有摄像头的检测"""
+        with self.lock:
+            config_ids = list(self.active_detections.keys())
+        
+        for config_id in config_ids:
+            self.stop_detection(config_id)
+        
+        print("[Detection] Stopped all detections")
+
+# 创建摄像头检测管理器
+detection_manager = CameraDetectionManager()
+
+# 定时任务函数
+def start_all_detections():
+    """启动所有启用的摄像头检测"""
+    print(f"[Scheduler] Starting all detections at {datetime.now()}")
+    
+    try:
+        configs = CameraConfig.get_enabled()
+        print(f"[Scheduler] Found {len(configs)} enabled cameras")
+        
+        for config in configs:
+            detection_manager.start_detection(config)
+    except Exception as e:
+        print(f"[Scheduler] Error starting detections: {e}")
+
+def stop_all_detections():
+    """停止所有摄像头检测"""
+    print(f"[Scheduler] Stopping all detections at {datetime.now()}")
+    detection_manager.stop_all_detections()
 
 
 @app.get("/")

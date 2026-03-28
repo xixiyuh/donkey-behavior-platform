@@ -76,3 +76,22 @@ class MatingEvent(MatingEventBase):
     
     class Config:
         from_attributes = True
+
+class CameraConfigBase(BaseModel):
+    camera_id: str
+    flv_url: str
+    barn_id: int
+    pen_id: int
+    start_time: str = '09:00'
+    end_time: str = '19:00'
+
+class CameraConfigCreate(CameraConfigBase):
+    pass
+
+class CameraConfig(CameraConfigBase):
+    id: int
+    enable: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

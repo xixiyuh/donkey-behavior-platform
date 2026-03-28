@@ -72,6 +72,23 @@ def init_db():
     )
     ''')
     
+    # 创建摄像头配置表
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS camera_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        camera_id TEXT NOT NULL,
+        flv_url TEXT NOT NULL,
+        barn_id INTEGER NOT NULL,
+        pen_id INTEGER NOT NULL,
+        enable INTEGER DEFAULT 1,
+        start_time TEXT DEFAULT '09:00',
+        end_time TEXT DEFAULT '19:00',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (barn_id) REFERENCES barns (id),
+        FOREIGN KEY (pen_id) REFERENCES pens (id)
+    )
+    ''')
+    
     conn.commit()
     conn.close()
 
