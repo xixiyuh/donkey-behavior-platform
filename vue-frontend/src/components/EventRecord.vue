@@ -42,7 +42,7 @@
         <select
           id="eventCameraId"
           v-model="selectedCamera"
-          @change="loadEvents"
+          @change="loadEvents(currentPage)"
         >
           <option value="" disabled selected style="color: #888;">请选择摄像头</option>
           <option
@@ -87,6 +87,7 @@
                   class="screenshot-img"
                   @click="openImageModal(getImageUrl(event.screenshot))"
                   style="cursor: pointer;"
+                  @error="handleImageError"
                 />
               </div>
               <div v-else class="no-image">无截图</div>
@@ -99,6 +100,18 @@
           </tr>
         </tbody>
       </table>
+      <!-- 分页控件 -->
+      <div class="pagination">
+        <button @click="changePage(1)" :disabled="currentPage === 1">首页</button>
+        <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1">上一页</button>
+        <span>{{ currentPage }} / {{ totalPages }}</span>
+        <button @click="changePage(currentPage + 1)" :disabled="currentPage >= totalPages">下一页</button>
+        <div class="page-jump">
+          <input type="number" v-model.number="jumpPage" min="1" :max="totalPages" style="width: 60px; margin: 0 10px;" />
+          <button @click="jumpToPage">跳转</button>
+        </div>
+        <span class="total-records">共 {{ eventStore.total }} 条记录</span>
+      </div>
     </div>
 
     <!-- 图片放大模态框 -->
@@ -112,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { useEventStore } from '../stores/event';
 import type { Barn, Pen, MatingEvent, Camera } from '../types';
@@ -120,11 +133,29 @@ import type { Barn, Pen, MatingEvent, Camera } from '../types';
 const barnStore = useBarnStore();
 const eventStore = useEventStore();
 
+const currentPage = ref(1);
+const jumpPage = ref(1);
+
 const pens = ref<Pen[]>([]);
 const cameras = ref<Camera[]>([]);
 const selectedBarn = ref<string>('');
 const selectedPen = ref<string>('');
 const selectedCamera = ref<string>('');
+
+// 计算总页数
+const totalPages = computed(() => {
+  return Math.ceil(eventStore.total / 10);
+});
+
+// 跳转到指定页码
+const jumpToPage = async () => {
+  if (jumpPage.value < 1 || jumpPage.value > totalPages.value) {
+    alert('请输入有效的页码');
+    return;
+  }
+  currentPage.value = jumpPage.value;
+  await loadEvents(currentPage.value);
+};
 
 // 图片模态框相关变量
 const showImageModal = ref(false);
@@ -178,28 +209,34 @@ const loadCameras = async () => {
 // 处理养殖舍变更
 const handleBarnChange = async () => {
   await loadPens();
-  loadEvents();
+  loadEvents(currentPage.value);
 };
 
 // 处理栏变更
 const handlePenChange = async () => {
   await loadCameras();
-  loadEvents();
+  loadEvents(currentPage.value);
 };
 
 // 加载事件列表
-const loadEvents = async () => {
+const loadEvents = async (page: number = 1) => {
   try {
     if (selectedPen.value) {
-      await eventStore.fetchEventsByPen(parseInt(selectedPen.value));
+      await eventStore.fetchEventsByPen(parseInt(selectedPen.value), page);
     } else if (selectedBarn.value) {
-      await eventStore.fetchEventsByBarn(parseInt(selectedBarn.value));
+      await eventStore.fetchEventsByBarn(parseInt(selectedBarn.value), page);
     } else {
-      await eventStore.fetchEvents();
+      await eventStore.fetchEvents(page);
     }
   } catch (err) {
     console.error('Error loading events:', err);
   }
+};
+
+const changePage = async (page: number) => {
+  if (page < 1) return;
+  currentPage.value = page;
+  await loadEvents(page);
 };
 
 // 格式化日期时间
@@ -228,10 +265,14 @@ const getBarnName = (barnId: number): string => {
 // 获取图片URL
 const getImageUrl = (screenshotPath: string): string => {
   // 构建完整的图片URL
+  if (!screenshotPath) return '';
+  if (screenshotPath.startsWith('http://') || screenshotPath.startsWith('https://')) {
+    return screenshotPath;
+  }
   if (screenshotPath.startsWith('/')) {
     return `http://localhost:8000${screenshotPath}`;
   }
-  return screenshotPath;
+  return `http://localhost:8000/${screenshotPath}`;
 };
 
 // 打开图片模态框
@@ -246,10 +287,17 @@ const closeImageModal = () => {
   currentImageUrl.value = '';
 };
 
+// 处理图片加载错误
+const handleImageError = (event: Event) => {
+  const target = event.target as HTMLImageElement;
+  target.src = ''; // 清空src，显示alt文本
+  target.alt = '图片加载失败';
+};
+
 // 组件挂载时加载数据
 onMounted(async () => {
   await loadBarns();
-  loadEvents();
+  loadEvents(currentPage.value);
 });
 </script>
 
@@ -470,5 +518,35 @@ th:nth-child(10), td:nth-child(10) {
   max-height: 80vh;
   object-fit: contain;
   border-radius: 4px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.pagination button {
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+.pagination span {
+  padding: 0 10px;
+  color: #60a5fa;
+  font-weight: bold;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+}
+
+.total-records {
+  margin-left: 20px;
+  color: #b9c2d0;
+  font-size: 14px;
 }
 </style>

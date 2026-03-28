@@ -70,12 +70,24 @@
           </tr>
         </tbody>
       </table>
+      <!-- 分页控件 -->
+      <div class="pagination">
+        <button @click="changePage(1)" :disabled="currentPage === 1">首页</button>
+        <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1">上一页</button>
+        <span>{{ currentPage }} / {{ totalPages }}</span>
+        <button @click="changePage(currentPage + 1)" :disabled="currentPage >= totalPages">下一页</button>
+        <div class="page-jump">
+          <input type="number" v-model.number="jumpPage" min="1" :max="totalPages" style="width: 60px; margin: 0 10px;" />
+          <button @click="jumpToPage">跳转</button>
+        </div>
+        <span class="total-records">共 {{ penStore.total }} 条记录</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
@@ -85,10 +97,28 @@ const barnStore = useBarnStore();
 const penStore = usePenStore();
 const cameraStore = useCameraStore();
 
+const currentPage = ref(1);
+const jumpPage = ref(1);
+
 const penForm = ref({
-  barn_id: '',
   pen_number: 1,
+  barn_id: '',
 });
+
+// 计算总页数
+const totalPages = computed(() => {
+  return Math.ceil(penStore.total / 10);
+});
+
+// 跳转到指定页码
+const jumpToPage = async () => {
+  if (jumpPage.value < 1 || jumpPage.value > totalPages.value) {
+    alert('请输入有效的页码');
+    return;
+  }
+  currentPage.value = jumpPage.value;
+  await loadPens(currentPage.value);
+};
 
 // 筛选后的栏列表
 const filteredPens = ref<Pen[]>([]);
@@ -103,14 +133,20 @@ const loadBarns = async () => {
 };
 
 // 加载栏列表
-const loadPens = async () => {
+const loadPens = async (page: number = 1) => {
   try {
-    await penStore.fetchPens();
+    await penStore.fetchPens(page);
     // 加载后筛选
     filterPens();
   } catch (err) {
     console.error('Error loading pens:', err);
   }
+};
+
+const changePage = async (page: number) => {
+  if (page < 1) return;
+  currentPage.value = page;
+  await loadPens(page);
 };
 
 // 按养殖舍筛选栏列表
@@ -201,7 +237,7 @@ const deletePen = async (penId: number) => {
 // 组件挂载时加载数据
 onMounted(async () => {
   await loadBarns();
-  await loadPens();
+  await loadPens(currentPage.value);
 });
 </script>
 
@@ -323,5 +359,35 @@ th:nth-child(4), td:nth-child(4) {
   button {
     width: 100%;
   }
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.pagination button {
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+.pagination span {
+  padding: 0 10px;
+  color: #60a5fa;
+  font-weight: bold;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+}
+
+.total-records {
+  margin-left: 20px;
+  color: #b9c2d0;
+  font-size: 14px;
 }
 </style>

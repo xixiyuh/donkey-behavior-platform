@@ -8,6 +8,7 @@ axios.defaults.baseURL = 'http://localhost:8080';
 export const usePenStore = defineStore('pen', {
   state: () => ({
     pens: [] as Pen[],
+    total: 0,
     loading: false,
     error: null as string | null,
   }),
@@ -19,12 +20,13 @@ export const usePenStore = defineStore('pen', {
   },
 
   actions: {
-    async fetchPens() {
+    async fetchPens(page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get('/api/pens');
-        this.pens = response.data;
+        const response = await axios.get('/api/pens', { params: { page } });
+        this.pens = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载栏列表失败';
         console.error('Error fetching pens:', error);

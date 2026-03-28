@@ -15,13 +15,26 @@ class Barn:
         return barn_id
     
     @staticmethod
-    def get_all():
+    def get_all(page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM barns ORDER BY id')
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM barns')
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM barns ORDER BY id LIMIT ? OFFSET ?', (page_size, offset))
         barns = cursor.fetchall()
         conn.close()
-        return barns
+        
+        return {
+            'items': barns,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
     def get_by_id(barn_id):
@@ -75,13 +88,26 @@ class Pen:
         return pen_id
     
     @staticmethod
-    def get_all():
+    def get_all(page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM pens ORDER BY barn_id, pen_number')
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM pens')
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM pens ORDER BY barn_id, pen_number LIMIT ? OFFSET ?', (page_size, offset))
         pens = cursor.fetchall()
         conn.close()
-        return pens
+        
+        return {
+            'items': pens,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
     def get_by_id(pen_id):
@@ -136,13 +162,26 @@ class Camera:
         return camera_id
     
     @staticmethod
-    def get_all():
+    def get_all(page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM cameras ORDER BY barn_id, pen_id')
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM cameras')
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM cameras ORDER BY barn_id, pen_id LIMIT ? OFFSET ?', (page_size, offset))
         cameras = cursor.fetchall()
         conn.close()
-        return cameras
+        
+        return {
+            'items': cameras,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
     def get_by_id(camera_id):
@@ -206,13 +245,26 @@ class MatingEvent:
         return event_id
     
     @staticmethod
-    def get_all():
+    def get_all(page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM mating_events ORDER BY start_time DESC')
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM mating_events')
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM mating_events ORDER BY start_time DESC LIMIT ? OFFSET ?', (page_size, offset))
         events = cursor.fetchall()
         conn.close()
-        return events
+        
+        return {
+            'items': events,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
     def get_by_id(event_id):
@@ -224,22 +276,48 @@ class MatingEvent:
         return event
     
     @staticmethod
-    def get_by_pen(pen_id):
+    def get_by_pen(pen_id, page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM mating_events WHERE pen_id = ? ORDER BY start_time DESC', (pen_id,))
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM mating_events WHERE pen_id = ?', (pen_id,))
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM mating_events WHERE pen_id = ? ORDER BY start_time DESC LIMIT ? OFFSET ?', (pen_id, page_size, offset))
         events = cursor.fetchall()
         conn.close()
-        return events
+        
+        return {
+            'items': events,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
-    def get_by_barn(barn_id):
+    def get_by_barn(barn_id, page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM mating_events WHERE barn_id = ? ORDER BY start_time DESC', (barn_id,))
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM mating_events WHERE barn_id = ?', (barn_id,))
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM mating_events WHERE barn_id = ? ORDER BY start_time DESC LIMIT ? OFFSET ?', (barn_id, page_size, offset))
         events = cursor.fetchall()
         conn.close()
-        return events
+        
+        return {
+            'items': events,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
 
 class CameraConfig:
     @staticmethod
@@ -256,13 +334,26 @@ class CameraConfig:
         return config_id
     
     @staticmethod
-    def get_all():
+    def get_all(page=1, page_size=10):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM camera_configs')
+        
+        # 获取总记录数
+        cursor.execute('SELECT COUNT(*) FROM camera_configs')
+        total = cursor.fetchone()[0]
+        
+        # 获取分页数据
+        offset = (page - 1) * page_size
+        cursor.execute('SELECT * FROM camera_configs LIMIT ? OFFSET ?', (page_size, offset))
         configs = cursor.fetchall()
         conn.close()
-        return configs
+        
+        return {
+            'items': configs,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
     
     @staticmethod
     def get_enabled():

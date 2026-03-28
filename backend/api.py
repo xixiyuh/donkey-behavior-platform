@@ -54,15 +54,20 @@ def create_barn(barn: BarnCreate):
             raise HTTPException(status_code=400, detail=f"养殖舍名称 '{barn.name}' 已存在")
         raise HTTPException(status_code=400, detail="创建养殖舍失败")
 
-@router.get("/barns", response_model=List[BarnSchema])
-def get_barns():
-    barns = Barn.get_all()
-    return [{
-        "id": barn["id"],
-        "name": barn["name"],
-        "total_pens": barn["total_pens"],
-        "created_at": barn["created_at"]
-    } for barn in barns]
+@router.get("/barns")
+def get_barns(page: int = 1, page_size: int = 10):
+    result = Barn.get_all(page, page_size)
+    return {
+        "items": [{
+            "id": barn["id"],
+            "name": barn["name"],
+            "total_pens": barn["total_pens"],
+            "created_at": barn["created_at"]
+        } for barn in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 @router.get("/barns/{barn_id}", response_model=BarnSchema)
 def get_barn(barn_id: int):
@@ -112,15 +117,20 @@ def create_pen(pen: PenCreate):
         "created_at": created_pen["created_at"]
     }
 
-@router.get("/pens", response_model=List[PenSchema])
-def get_pens():
-    pens = Pen.get_all()
-    return [{
-        "id": pen["id"],
-        "pen_number": pen["pen_number"],
-        "barn_id": pen["barn_id"],
-        "created_at": pen["created_at"]
-    } for pen in pens]
+@router.get("/pens")
+def get_pens(page: int = 1, page_size: int = 10):
+    result = Pen.get_all(page, page_size)
+    return {
+        "items": [{
+            "id": pen["id"],
+            "pen_number": pen["pen_number"],
+            "barn_id": pen["barn_id"],
+            "created_at": pen["created_at"]
+        } for pen in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 @router.get("/pens/{pen_id}", response_model=PenSchema)
 def get_pen(pen_id: int):
@@ -187,17 +197,22 @@ def create_camera(camera: CameraCreate):
             raise HTTPException(status_code=400, detail=f"摄像头标识 '{camera.camera_id}' 已存在")
         raise HTTPException(status_code=400, detail="创建摄像头失败")
 
-@router.get("/cameras", response_model=List[CameraSchema])
-def get_cameras():
-    cameras = Camera.get_all()
-    return [{
-        "id": camera["id"],
-        "camera_id": camera["camera_id"],
-        "pen_id": camera["pen_id"],
-        "barn_id": camera["barn_id"],
-        "flv_url": camera["flv_url"],
-        "created_at": camera["created_at"]
-    } for camera in cameras]
+@router.get("/cameras")
+def get_cameras(page: int = 1, page_size: int = 10):
+    result = Camera.get_all(page, page_size)
+    return {
+        "items": [{
+            "id": camera["id"],
+            "camera_id": camera["camera_id"],
+            "pen_id": camera["pen_id"],
+            "barn_id": camera["barn_id"],
+            "flv_url": camera["flv_url"],
+            "created_at": camera["created_at"]
+        } for camera in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 @router.get("/cameras/{camera_id}", response_model=CameraSchema)
 def get_camera(camera_id: int):
@@ -286,22 +301,27 @@ def create_mating_event(event: MatingEventCreate):
         "created_at": created_event["created_at"]
     }
 
-@router.get("/mating-events", response_model=List[MatingEventSchema])
-def get_mating_events():
-    events = MatingEvent.get_all()
-    return [{
-        "id": event["id"],
-        "camera_id": event["camera_id"],
-        "pen_id": event["pen_id"],
-        "barn_id": event["barn_id"],
-        "start_time": event["start_time"],
-        "end_time": event["end_time"],
-        "duration": event["duration"],
-        "avg_confidence": event["avg_confidence"],
-        "max_confidence": event["max_confidence"],
-        "screenshot": event["screenshot"],
-        "created_at": event["created_at"]
-    } for event in events]
+@router.get("/mating-events")
+def get_mating_events(page: int = 1, page_size: int = 10):
+    result = MatingEvent.get_all(page, page_size)
+    return {
+        "items": [{
+            "id": event["id"],
+            "camera_id": event["camera_id"],
+            "pen_id": event["pen_id"],
+            "barn_id": event["barn_id"],
+            "start_time": event["start_time"],
+            "end_time": event["end_time"],
+            "duration": event["duration"],
+            "avg_confidence": event["avg_confidence"],
+            "max_confidence": event["max_confidence"],
+            "screenshot": event["screenshot"],
+            "created_at": event["created_at"]
+        } for event in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 @router.get("/mating-events/{event_id}", response_model=MatingEventSchema)
 def get_mating_event(event_id: int):
@@ -322,39 +342,49 @@ def get_mating_event(event_id: int):
         "created_at": event["created_at"]
     }
 
-@router.get("/pens/{pen_id}/mating-events", response_model=List[MatingEventSchema])
-def get_mating_events_by_pen(pen_id: int):
-    events = MatingEvent.get_by_pen(pen_id)
-    return [{
-        "id": event["id"],
-        "camera_id": event["camera_id"],
-        "pen_id": event["pen_id"],
-        "barn_id": event["barn_id"],
-        "start_time": event["start_time"],
-        "end_time": event["end_time"],
-        "duration": event["duration"],
-        "avg_confidence": event["avg_confidence"],
-        "max_confidence": event["max_confidence"],
-        "screenshot": event["screenshot"],
-        "created_at": event["created_at"]
-    } for event in events]
+@router.get("/pens/{pen_id}/mating-events")
+def get_mating_events_by_pen(pen_id: int, page: int = 1, page_size: int = 10):
+    result = MatingEvent.get_by_pen(pen_id, page, page_size)
+    return {
+        "items": [{
+            "id": event["id"],
+            "camera_id": event["camera_id"],
+            "pen_id": event["pen_id"],
+            "barn_id": event["barn_id"],
+            "start_time": event["start_time"],
+            "end_time": event["end_time"],
+            "duration": event["duration"],
+            "avg_confidence": event["avg_confidence"],
+            "max_confidence": event["max_confidence"],
+            "screenshot": event["screenshot"],
+            "created_at": event["created_at"]
+        } for event in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
-@router.get("/barns/{barn_id}/mating-events", response_model=List[MatingEventSchema])
-def get_mating_events_by_barn(barn_id: int):
-    events = MatingEvent.get_by_barn(barn_id)
-    return [{
-        "id": event["id"],
-        "camera_id": event["camera_id"],
-        "pen_id": event["pen_id"],
-        "barn_id": event["barn_id"],
-        "start_time": event["start_time"],
-        "end_time": event["end_time"],
-        "duration": event["duration"],
-        "avg_confidence": event["avg_confidence"],
-        "max_confidence": event["max_confidence"],
-        "screenshot": event["screenshot"],
-        "created_at": event["created_at"]
-    } for event in events]
+@router.get("/barns/{barn_id}/mating-events")
+def get_mating_events_by_barn(barn_id: int, page: int = 1, page_size: int = 10):
+    result = MatingEvent.get_by_barn(barn_id, page, page_size)
+    return {
+        "items": [{
+            "id": event["id"],
+            "camera_id": event["camera_id"],
+            "pen_id": event["pen_id"],
+            "barn_id": event["barn_id"],
+            "start_time": event["start_time"],
+            "end_time": event["end_time"],
+            "duration": event["duration"],
+            "avg_confidence": event["avg_confidence"],
+            "max_confidence": event["max_confidence"],
+            "screenshot": event["screenshot"],
+            "created_at": event["created_at"]
+        } for event in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 # 摄像头配置相关API
 @router.post("/camera-configs", response_model=CameraConfigSchema)
@@ -382,20 +412,25 @@ def create_camera_config(config: CameraConfigCreate):
         "created_at": created_config["created_at"]
     }
 
-@router.get("/camera-configs", response_model=List[CameraConfigSchema])
-def get_camera_configs():
-    configs = CameraConfig.get_all()
-    return [{
-        "id": config["id"],
-        "camera_id": config["camera_id"],
-        "flv_url": config["flv_url"],
-        "barn_id": config["barn_id"],
-        "pen_id": config["pen_id"],
-        "start_time": config["start_time"],
-        "end_time": config["end_time"],
-        "enable": config["enable"],
-        "created_at": config["created_at"]
-    } for config in configs]
+@router.get("/camera-configs")
+def get_camera_configs(page: int = 1, page_size: int = 10):
+    result = CameraConfig.get_all(page, page_size)
+    return {
+        "items": [{
+            "id": config["id"],
+            "camera_id": config["camera_id"],
+            "flv_url": config["flv_url"],
+            "barn_id": config["barn_id"],
+            "pen_id": config["pen_id"],
+            "start_time": config["start_time"],
+            "end_time": config["end_time"],
+            "enable": config["enable"],
+            "created_at": config["created_at"]
+        } for config in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
 
 @router.patch("/camera-configs/{config_id}/toggle")
 def toggle_camera_config(config_id: int):

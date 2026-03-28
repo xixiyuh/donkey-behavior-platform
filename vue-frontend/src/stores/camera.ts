@@ -9,6 +9,8 @@ export const useCameraStore = defineStore('camera', {
   state: () => ({
     cameras: [] as Camera[],
     cameraConfigs: [] as CameraConfig[],
+    total: 0,
+    configTotal: 0,
     loading: false,
     error: null as string | null,
   }),
@@ -21,12 +23,13 @@ export const useCameraStore = defineStore('camera', {
   },
 
   actions: {
-    async fetchCameras() {
+    async fetchCameras(page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get('/api/cameras');
-        this.cameras = response.data;
+        const response = await axios.get('/api/cameras', { params: { page } });
+        this.cameras = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载摄像头列表失败';
         console.error('Error fetching cameras:', error);
@@ -70,14 +73,15 @@ export const useCameraStore = defineStore('camera', {
     },
 
     // 摄像头配置相关方法
-    async fetchCameraConfigs() {
+    async fetchCameraConfigs(page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get('/api/camera-configs');
-        this.cameraConfigs = response.data;
+        const response = await axios.get('/api/camera-configs', { params: { page } });
+        this.cameraConfigs = response.data.items;
+        this.configTotal = response.data.total;
       } catch (error) {
-        this.error = '加载摄像头配置失败';
+        this.error = '加载摄像头配置列表失败';
         console.error('Error fetching camera configs:', error);
       } finally {
         this.loading = false;

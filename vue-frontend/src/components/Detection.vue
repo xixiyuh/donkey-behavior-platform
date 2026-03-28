@@ -185,11 +185,31 @@ const loadBarns = async () => {
   }
 };
 
+// 加载所有摄像头
+const loadAllCameras = async () => {
+  try {
+    // 从penStore获取所有摄像头
+    await penStore.fetchPens();
+    const allPens = penStore.allPens;
+    const allCameraPromises = allPens.map(pen => penStore.fetchPenCameras(pen.id));
+    const cameraLists = await Promise.all(allCameraPromises);
+    // 合并所有摄像头列表
+    const allCameras = cameraLists.flat();
+    // 去重
+    const uniqueCameras = Array.from(new Map(allCameras.map(camera => [camera.id, camera])).values());
+    cameras.value = uniqueCameras;
+    selectedCamera.value = '';
+    log('所有摄像头加载成功', 'success');
+  } catch (error) {
+    log('加载所有摄像头失败', 'error');
+  }
+};
+
 // 加载栏列表
 const loadPens = async () => {
   if (!selectedBarn.value) {
     pens.value = [];
-    cameras.value = [];
+    await loadAllCameras();
     selectedPen.value = '';
     selectedCamera.value = '';
     return;
@@ -198,7 +218,12 @@ const loadPens = async () => {
   try {
     const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
     pens.value = penList;
-    cameras.value = [];
+    // 加载该养殖舍的所有摄像头
+    const cameraPromises = penList.map(pen => penStore.fetchPenCameras(pen.id));
+    const cameraLists = await Promise.all(cameraPromises);
+    const barnCameras = cameraLists.flat();
+    const uniqueCameras = Array.from(new Map(barnCameras.map(camera => [camera.id, camera])).values());
+    cameras.value = uniqueCameras;
     selectedPen.value = '';
     selectedCamera.value = '';
     log('栏列表加载成功', 'success');
@@ -210,7 +235,22 @@ const loadPens = async () => {
 // 加载摄像头列表
 const loadCameras = async () => {
   if (!selectedPen.value) {
-    cameras.value = [];
+    // 如果没有选择栏，加载该养殖舍的所有摄像头
+    if (selectedBarn.value) {
+      try {
+        const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
+        const cameraPromises = penList.map(pen => penStore.fetchPenCameras(pen.id));
+        const cameraLists = await Promise.all(cameraPromises);
+        const barnCameras = cameraLists.flat();
+        const uniqueCameras = Array.from(new Map(barnCameras.map(camera => [camera.id, camera])).values());
+        cameras.value = uniqueCameras;
+      } catch (error) {
+        log('加载养殖舍摄像头失败', 'error');
+      }
+    } else {
+      // 如果没有选择养殖舍，加载所有摄像头
+      await loadAllCameras();
+    }
     selectedCamera.value = '';
     return;
   }
@@ -380,10 +420,11 @@ watch(isConnected, (newValue) => {
 });
 
 // 组件挂载时加载数据
-onMounted(() => {
+onMounted(async () => {
   log('页面完全加载完成', 'success');
   log('RK3588 实时检测系统已就绪', 'success');
-  loadBarns();
+  await loadBarns();
+  await loadAllCameras();
 });
 </script>
 

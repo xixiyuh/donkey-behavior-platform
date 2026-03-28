@@ -8,6 +8,7 @@ axios.defaults.baseURL = 'http://localhost:8080';
 export const useBarnStore = defineStore('barn', {
   state: () => ({
     barns: [] as Barn[],
+    total: 0,
     loading: false,
     error: null as string | null,
   }),
@@ -19,14 +20,15 @@ export const useBarnStore = defineStore('barn', {
   },
 
   actions: {
-    async fetchBarns() {
+    async fetchBarns(page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        console.log('Fetching barns...');
-        const response = await axios.get('/api/barns');
+        console.log('Fetching barns...', { page });
+        const response = await axios.get('/api/barns', { params: { page } });
         console.log('Barns response:', response.data);
-        this.barns = response.data;
+        this.barns = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载养殖舍列表失败';
         console.error('Error fetching barns:', error);

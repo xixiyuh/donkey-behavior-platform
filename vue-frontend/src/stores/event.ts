@@ -8,6 +8,7 @@ axios.defaults.baseURL = 'http://localhost:8080';
 export const useEventStore = defineStore('event', {
   state: () => ({
     events: [] as MatingEvent[],
+    total: 0,
     loading: false,
     error: null as string | null,
   }),
@@ -19,12 +20,13 @@ export const useEventStore = defineStore('event', {
   },
 
   actions: {
-    async fetchEvents() {
+    async fetchEvents(page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get('/api/mating-events');
-        this.events = response.data;
+        const response = await axios.get('/api/mating-events', { params: { page } });
+        this.events = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载事件列表失败';
         console.error('Error fetching events:', error);
@@ -33,33 +35,31 @@ export const useEventStore = defineStore('event', {
       }
     },
 
-    async fetchEventsByBarn(barnId: number) {
+    async fetchEventsByPen(penId: number, page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get(`/api/barns/${barnId}/mating-events`);
-        this.events = response.data;
-        return response.data;
+        const response = await axios.get(`/api/pens/${penId}/mating-events`, { params: { page } });
+        this.events = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载事件列表失败';
-        console.error('Error fetching events by barn:', error);
-        return [];
+        console.error('Error fetching events by pen:', error);
       } finally {
         this.loading = false;
       }
     },
 
-    async fetchEventsByPen(penId: number) {
+    async fetchEventsByBarn(barnId: number, page: number = 1) {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.get(`/api/pens/${penId}/mating-events`);
-        this.events = response.data;
-        return response.data;
+        const response = await axios.get(`/api/barns/${barnId}/mating-events`, { params: { page } });
+        this.events = response.data.items;
+        this.total = response.data.total;
       } catch (error) {
         this.error = '加载事件列表失败';
-        console.error('Error fetching events by pen:', error);
-        return [];
+        console.error('Error fetching events by barn:', error);
       } finally {
         this.loading = false;
       }
