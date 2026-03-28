@@ -1,7 +1,19 @@
 from fastapi import APIRouter, HTTPException
 from ..models import CameraConfig
 from ..schemas import CameraConfig as CameraConfigSchema, CameraConfigCreate
-from ..api import start_camera_detection, stop_camera_detection
+
+# 延迟导入启动和停止检测的函数
+start_camera_detection = None
+stop_camera_detection = None
+
+# 注册启动和停止检测的函数
+def register_start_detection_func(func):
+    global start_camera_detection
+    start_camera_detection = func
+
+def register_stop_detection_func(func):
+    global stop_camera_detection
+    stop_camera_detection = func
 
 router = APIRouter(prefix="/camera-configs", tags=["camera-configs"])
 
@@ -16,7 +28,8 @@ def create_camera_config(config: CameraConfigCreate):
         raise HTTPException(status_code=404, detail="Camera config not created")
     
     # 启动摄像头检测（新创建的配置默认是启用状态）
-    start_camera_detection(created_config)
+    if start_camera_detection:
+        start_camera_detection(created_config)
     
     return {
         "id": created_config["id"],
@@ -65,10 +78,12 @@ def toggle_camera_config(config_id: int):
     if updated_config:
         if updated_config["enable"] == 1:
             # 如果切换后是启用状态，启动检测
-            start_camera_detection(updated_config)
+            if start_camera_detection:
+                start_camera_detection(updated_config)
         else:
             # 如果切换后是禁用状态，停止检测
-            stop_camera_detection(config_id)
+            if stop_camera_detection:
+                stop_camera_detection(config_id)
     
     return {"message": "Camera config toggled successfully"}
 

@@ -19,6 +19,28 @@
     <div v-if="barnStore.error" class="error-message">
       {{ barnStore.error }}
     </div>
+
+    <!-- 编辑表单 -->
+    <div v-if="editingBarn" class="edit-form">
+      <h3>编辑养殖舍</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="editBarnName">养殖舍名称</label>
+          <input type="text" id="editBarnName" v-model="editForm.name" placeholder="请输入养殖舍名称" />
+        </div>
+        <div class="form-group">
+          <label for="editBarnTotalPens">总栏数</label>
+          <input type="number" id="editBarnTotalPens" v-model="editForm.total_pens" placeholder="请输入总栏数" min="1" max="8" />
+        </div>
+      </div>
+      <div class="buttons">
+        <button @click="saveEdit" :disabled="barnStore.isLoading">
+          {{ barnStore.isLoading ? '保存中...' : '保存' }}
+        </button>
+        <button @click="cancelEdit">取消</button>
+      </div>
+    </div>
+
     <div class="table-container">
       <table id="barnTable">
         <thead>
@@ -79,6 +101,13 @@ const barnForm = ref({
   total_pens: 1,
 });
 
+// 编辑相关变量
+const editingBarn = ref<Barn | null>(null);
+const editForm = ref({
+  name: '',
+  total_pens: 1,
+});
+
 // 计算总页数
 const totalPages = computed(() => {
   return Math.ceil(barnStore.total / 10);
@@ -130,7 +159,61 @@ const createBarn = async () => {
 };
 
 const editBarn = (barn: Barn) => {
-  console.log('Edit barn:', barn);
+  editingBarn.value = barn;
+  editForm.value = {
+    name: barn.name,
+    total_pens: barn.total_pens,
+  };
+};
+
+const saveEdit = async () => {
+  if (!editingBarn.value) return;
+
+  if (!editForm.value.name || !editForm.value.total_pens) {
+    barnStore.error = '请填写完整的养殖舍信息';
+    return;
+  }
+
+  try {
+    // 检查名称是否与其他养殖舍重复
+    const otherBarns = barnStore.allBarns.filter(b => b.id !== editingBarn.value!.id);
+    const nameExists = otherBarns.some(b => b.name === editForm.value.name);
+
+    if (nameExists) {
+      alert('该名称已被注册，修改名称失败');
+      return;
+    }
+
+    // 检查总栏数是否小于当前实际栏数
+    await penStore.fetchPens();
+    const barnPens = penStore.allPens.filter(pen => pen.barn_id === editingBarn.value!.id);
+    const currentPenCount = barnPens.length;
+    const newTotalPens = parseInt(editForm.value.total_pens.toString());
+
+    if (newTotalPens < currentPenCount) {
+      alert(`本养殖舍已有${currentPenCount}个栏，如要强行改为${newTotalPens}个栏，请去栏管理中删去部分栏`);
+      return;
+    }
+
+    // 执行更新
+    await barnStore.updateBarn(editingBarn.value.id, {
+      name: editForm.value.name,
+      total_pens: newTotalPens,
+    });
+
+    // 关闭编辑表单
+    cancelEdit();
+  } catch (err: any) {
+    barnStore.error = err.response?.data?.detail || '更新养殖舍失败';
+  }
+};
+
+const cancelEdit = () => {
+  editingBarn.value = null;
+  editForm.value = {
+    name: '',
+    total_pens: 1,
+  };
 };
 
 const deleteBarn = async (barnId: number) => {
@@ -323,5 +406,20 @@ th:nth-child(4), td:nth-child(4) {
   margin-left: 20px;
   color: #b9c2d0;
   font-size: 14px;
+}
+
+/* 编辑表单样式 */
+.edit-form {
+  margin: 20px 0;
+  padding: 20px;
+  background: #13172f;
+  border-radius: 10px;
+  border: 1px solid #334;
+}
+
+.edit-form h3 {
+  margin-top: 0;
+  color: #60a5fa;
+  margin-bottom: 15px;
 }
 </style>

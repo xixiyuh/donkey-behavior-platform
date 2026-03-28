@@ -270,9 +270,9 @@ const getImageUrl = (screenshotPath: string): string => {
     return screenshotPath;
   }
   if (screenshotPath.startsWith('/')) {
-    return `http://localhost:8000${screenshotPath}`;
+    return `http://localhost:8080${screenshotPath}`;
   }
-  return `http://localhost:8000/${screenshotPath}`;
+  return `http://localhost:8080/${screenshotPath}`;
 };
 
 // 打开图片模态框

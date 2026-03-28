@@ -219,7 +219,7 @@ const loadPens = async () => {
     const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
     pens.value = penList;
     // 加载该养殖舍的所有摄像头
-    const cameraPromises = penList.map(pen => penStore.fetchPenCameras(pen.id));
+    const cameraPromises = penList.map((pen: Pen) => penStore.fetchPenCameras(pen.id));
     const cameraLists = await Promise.all(cameraPromises);
     const barnCameras = cameraLists.flat();
     const uniqueCameras = Array.from(new Map(barnCameras.map(camera => [camera.id, camera])).values());
@@ -239,7 +239,7 @@ const loadCameras = async () => {
     if (selectedBarn.value) {
       try {
         const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
-        const cameraPromises = penList.map(pen => penStore.fetchPenCameras(pen.id));
+        const cameraPromises = penList.map((pen: Pen) => penStore.fetchPenCameras(pen.id));
         const cameraLists = await Promise.all(cameraPromises);
         const barnCameras = cameraLists.flat();
         const uniqueCameras = Array.from(new Map(barnCameras.map(camera => [camera.id, camera])).values());

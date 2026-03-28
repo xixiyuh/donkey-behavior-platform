@@ -61,7 +61,6 @@
             <td>{{ pen.pen_number }}</td>
             <td>{{ getBarnName(pen.barn_id) }}</td>
             <td>
-              <button @click="editPen(pen)">编辑</button>
               <button @click="deletePen(pen.id)">删除</button>
             </td>
           </tr>
@@ -195,11 +194,7 @@ const createPen = async () => {
   }
 };
 
-// 编辑栏
-const editPen = (pen: Pen) => {
-  // 这里可以实现编辑功能，弹出模态框或跳转到编辑页面
-  console.log('Edit pen:', pen);
-};
+
 
 // 删除栏
 const deletePen = async (penId: number) => {

@@ -103,5 +103,25 @@ export const useBarnStore = defineStore('barn', {
         this.loading = false;
       }
     },
+
+    async updateBarn(barnId: number, barn: { name: string; total_pens: number }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        console.log('Updating barn:', barnId, barn);
+        const response = await axios.put(`/api/barns/${barnId}`, barn);
+        console.log('Barn updated:', response.data);
+        const index = this.barns.findIndex(b => b.id === barnId);
+        if (index !== -1) {
+          this.barns[index] = response.data;
+        }
+        return response.data;
+      } catch (error: any) {
+        this.error = error.response?.data?.detail || '更新养殖舍失败';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
   },
 });

@@ -72,6 +72,24 @@ export const useCameraStore = defineStore('camera', {
       }
     },
 
+    async updateCamera(cameraId: number, camera: { flv_url: string }) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await axios.put(`/api/cameras/${cameraId}`, camera);
+        const index = this.cameras.findIndex(c => c.id === cameraId);
+        if (index !== -1) {
+          this.cameras[index] = response.data;
+        }
+        return response.data;
+      } catch (error: any) {
+        this.error = error.response?.data?.detail || '更新摄像头失败';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
     // 摄像头配置相关方法
     async fetchCameraConfigs(page: number = 1) {
       this.loading = true;

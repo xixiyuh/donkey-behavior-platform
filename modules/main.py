@@ -30,7 +30,7 @@ from .streams import open_source
 from .websocket_manager import WSManager
 from .overlays import put_fps
 
-from backend.api import router as farm_router, register_start_detection_func, register_stop_detection_func
+from backend.apis import router as farm_router, register_start_detection_func, register_stop_detection_func
 from backend.models import CameraConfig
 
 def get_detector():

@@ -89,10 +89,26 @@
             <td>{{ camera.camera_id }}</td>
             <td>{{ camera.pen_id }}</td>
             <td>{{ getBarnName(camera.barn_id) }}</td>
-            <td>{{ camera.flv_url }}</td>
             <td>
-              <button @click="editCamera(camera)">编辑</button>
-              <button @click="deleteCamera(camera.id)">删除</button>
+              <span v-if="!editingCameraId || editingCameraId !== camera.id">{{ camera.flv_url }}</span>
+              <input
+                v-else
+                type="text"
+                ref="flvInputRef"
+                v-model="editingFlvUrl"
+                style="width: 100%; padding: 5px; border-radius: 5px; border: 1px solid #334; background: #172045; color: #e7e9ee;"
+                @mounted="focusInput"
+              />
+            </td>
+            <td>
+              <template v-if="!editingCameraId || editingCameraId !== camera.id">
+                <button @click="startEdit(camera)">操作</button>
+                <button @click="deleteCamera(camera.id)">删除</button>
+              </template>
+              <template v-else>
+                <button @click="saveEdit(camera.id)">保存更改</button>
+                <button @click="cancelEdit">取消</button>
+              </template>
             </td>
           </tr>
           <tr v-if="filteredCameras.length === 0">
@@ -121,7 +137,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
-import type { Barn, Pen, Camera } from '../types';
+import type { Pen, Camera } from '../types';
 
 const barnStore = useBarnStore();
 const penStore = usePenStore();
@@ -138,6 +154,11 @@ const cameraForm = ref({
   camera_id: '',
   flv_url: '',
 });
+
+// 编辑相关变量
+const editingCameraId = ref<number | null>(null);
+const editingFlvUrl = ref('');
+const flvInputRef = ref<HTMLInputElement | null>(null);
 
 // 计算总页数
 const totalPages = computed(() => {
@@ -254,10 +275,46 @@ const createCamera = async () => {
   }
 };
 
-// 编辑摄像头
-const editCamera = (camera: Camera) => {
-  // 这里可以实现编辑功能，弹出模态框或跳转到编辑页面
-  console.log('Edit camera:', camera);
+// 开始编辑FLV地址
+const startEdit = (camera: Camera) => {
+  editingCameraId.value = camera.id;
+  editingFlvUrl.value = camera.flv_url;
+  // 延迟聚焦到输入框，确保DOM已经更新
+  setTimeout(() => {
+    focusInput();
+  }, 100);
+};
+
+// 聚焦到输入框并将光标移到最后
+const focusInput = () => {
+  if (flvInputRef.value) {
+    flvInputRef.value.focus();
+    const length = flvInputRef.value.value.length;
+    flvInputRef.value.setSelectionRange(length, length);
+  }
+};
+
+// 保存编辑
+const saveEdit = async (cameraId: number) => {
+  if (!editingFlvUrl.value) {
+    cameraStore.error = '请输入FLV地址';
+    return;
+  }
+
+  try {
+    await cameraStore.updateCamera(cameraId, {
+      flv_url: editingFlvUrl.value,
+    });
+    cancelEdit();
+  } catch (err: any) {
+    cameraStore.error = err.response?.data?.detail || '更新摄像头失败';
+  }
+};
+
+// 取消编辑
+const cancelEdit = () => {
+  editingCameraId.value = null;
+  editingFlvUrl.value = '';
 };
 
 // 删除摄像头
