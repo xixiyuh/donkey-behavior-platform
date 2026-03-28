@@ -273,3 +273,114 @@ python -m modules.main
 - 上传的文件会保存在`uploads`目录中，检测完成后会自动删除
 - 对于大文件，检测可能需要较长时间，请耐心等待
 - 如果遇到文件删除失败的情况，可能是后端资源未完全释放，请稍后再试
+
+## 事件记录功能改动
+
+### 1. 事件表结构优化
+- **修改文件**: `backend/database.py`
+- **修改内容**: 将事件表的三个截图字段（screenshot1、screenshot2、screenshot3）改为一个screenshot字段，简化表结构
+- **业务逻辑**: 系统现在只存储置信度最高的截图，减少存储空间占用，提高数据一致性
+- **伪代码**:
+  ```sql
+  -- 修改前
+  CREATE TABLE mating_events (
+      ...
+      screenshot1 TEXT,
+      screenshot2 TEXT,
+      screenshot3 TEXT,
+      ...
+  );
+  
+  -- 修改后
+  CREATE TABLE mating_events (
+      ...
+      screenshot TEXT,
+      ...
+  );
+  ```
+
+### 2. 前端事件记录页面优化
+- **修改文件**: `src/components/EventRecord.vue`
+- **修改内容**: 添加图片点击放大功能，优化事件列表显示
+- **业务逻辑**: 用户可以点击置信图查看大图，提高用户体验
+- **伪代码**:
+  ```javascript
+  // 打开图片模态框
+  const openImageModal = (imageUrl) => {
+    currentImageUrl.value = imageUrl;
+    showImageModal.value = true;
+  };
+  
+  // 关闭图片模态框
+  const closeImageModal = () => {
+    showImageModal.value = false;
+    currentImageUrl.value = '';
+  };
+  
+  // 获取图片URL
+  const getImageUrl = (screenshotPath) => {
+    if (screenshotPath.startsWith('/')) {
+      return `http://localhost:8000${screenshotPath}`;
+    }
+    return screenshotPath;
+  };
+  ```
+
+### 3. 后端事件记录逻辑优化
+- **修改文件**: `modules/mating_detector.py`
+- **修改内容**: 更新事件记录逻辑，使用单个screenshot字段，选择置信度最高的截图
+- **业务逻辑**: 当mating事件结束时，系统会选择置信度最高的截图进行保存，确保记录的图片质量
+- **伪代码**:
+  ```python
+  # 选择置信度最高的截图
+  screenshot = None
+  if event['screenshots']:
+      # 找出最大置信度对应的截图
+      max_conf_index = confidences.index(max_confidence)
+      # 确保索引在有效范围内
+      if max_conf_index < len(event['screenshots']):
+          screenshot = event['screenshots'][max_conf_index]
+      else:
+          # 如果索引超出范围，使用最后一张截图
+          screenshot = event['screenshots'][-1]
+  
+  # 记录到数据库
+  cursor.execute('''
+  INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
+                             avg_confidence, max_confidence, screenshot)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ''', (event['camera_id'], event['pen_id'], event['barn_id'], 
+        event['start_time'], end_time, duration, avg_confidence, max_confidence, 
+        screenshot))
+  ```
+
+### 4. 检测目标配置
+- **修改文件**: `modules/mating_detector.py`
+- **修改内容**: 将检测目标从"standing"改回"mating"，确保只有检测到mating类别时才进行记录
+- **业务逻辑**: 系统现在只对mating类别进行事件记录，符合业务需求
+- **伪代码**:
+  ```python
+  # 过滤出mating类型的检测结果
+  mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
+  ```
+
+### 5. 置信度阈值配置
+- **修改文件**: `modules/config.py`
+- **修改内容**: 添加MATING_CONF_THRES参数，用于控制mating检测的置信度阈值
+- **业务逻辑**: 用户可以通过修改配置文件来调节检测灵敏度，平衡检测准确率和召回率
+- **伪代码**:
+  ```python
+  # 配置文件中添加
+  MATING_CONF_THRES = 0.5  # mating检测的置信度阈值
+  
+  # 在检测逻辑中使用
+  mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
+  ```
+
+## 事件记录功能注意事项
+
+- **数据库表结构变更**: 由于修改了事件表结构，需要确保数据库已正确更新，否则可能会导致数据存储失败
+- **前端类型定义**: 前端的MatingEvent接口已更新，确保与后端保持一致，否则可能会导致类型错误
+- **置信度阈值调整**: 调整MATING_CONF_THRES参数时，需要根据实际场景进行测试，找到合适的阈值，平衡检测准确率和召回率
+- **截图存储**: 系统现在只存储置信度最高的截图，确保存储空间的合理使用
+- **事件持续时间**: 事件持续时间必须达到MATING_EVENT_MIN_DURATION（默认6秒）才会被记录，确保记录的事件具有实际意义

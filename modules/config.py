@@ -17,11 +17,11 @@ MATING_CONF_THRES = 0.4  # mating检测的置信度阈值
 PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt")  # ←改成你的真实路径也行
 # 例如：PT_MODEL_PATH = r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt"
 
-# ------- 流水线 / WS -------
-MAX_FPS = 20
-FRAME_INTERVAL = 1
-JPEG_QUALITY = 80
-QUEUE_MAX = 2
+# ------- 本地流水线 / WS -------
+MAX_FPS = 30            # 本地接收最大帧率
+FRAME_INTERVAL = 1      # 1表示每秒都做检测
+JPEG_QUALITY = 60       # JPEG质量，值越高质量越好（0-100）
+QUEUE_MAX = 2            # 本地流水线队列最大帧数
 
 # ------- 输入源默认 -------
 RTSP_URL = "rtsp://user:pass@ip:port/xxx"
@@ -34,9 +34,10 @@ MPV_EXE = r"D:\mpv\mpv-x86_64-20260104-git-a3350e2\mpv.exe"
 
 
 # mpvpipe 输出帧的固定尺寸（必须固定，才能按字节流切帧）
-MPV_PIPE_W = 1280
-MPV_PIPE_H = 720
-MPV_PIPE_FPS = 15
+# 根据实际FLV流参数调整为704x576，与原始流保持一致
+MPV_PIPE_W = 800
+MPV_PIPE_H = 600
+MPV_PIPE_FPS = 10
 
 # ------- 颜色（BGR） -------
 COLOR_STANDING = (0, 255, 0)
