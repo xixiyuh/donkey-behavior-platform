@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="event-record">
     <h2>事件记录</h2>
 

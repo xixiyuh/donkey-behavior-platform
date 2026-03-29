@@ -3,7 +3,8 @@ import axios from 'axios';
 import type { MatingEvent } from '../types';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = 'http://localhost:8080';
+const isProduction = import.meta.env.PROD;
+axios.defaults.baseURL = isProduction ? 'http://47.107.137.163' : 'http://localhost:8080';
 
 export const useEventStore = defineStore('event', {
   state: () => ({
