@@ -2,9 +2,11 @@ from fastapi import APIRouter, HTTPException
 from ..models import MatingEvent
 from ..schemas import MatingEvent as MatingEventSchema, MatingEventCreate
 
-router = APIRouter(prefix="/mating-events", tags=["events"])
+# Keep router prefix empty so we can expose both collection and nested routes
+# under /api with consistent REST-style paths.
+router = APIRouter(tags=["events"])
 
-@router.post("", response_model=MatingEventSchema)
+@router.post("/mating-events", response_model=MatingEventSchema)
 def create_mating_event(event: MatingEventCreate):
     event_id = MatingEvent.create(
         event.camera_id, event.pen_id, event.barn_id, event.start_time, event.end_time, 
@@ -28,7 +30,7 @@ def create_mating_event(event: MatingEventCreate):
         "created_at": created_event["created_at"]
     }
 
-@router.get("")
+@router.get("/mating-events")
 def get_mating_events(page: int = 1, page_size: int = 10):
     result = MatingEvent.get_all(page, page_size)
     return {
@@ -50,7 +52,7 @@ def get_mating_events(page: int = 1, page_size: int = 10):
         "page_size": result['page_size']
     }
 
-@router.get("/{event_id}", response_model=MatingEventSchema)
+@router.get("/mating-events/{event_id}", response_model=MatingEventSchema)
 def get_mating_event(event_id: int):
     event = MatingEvent.get_by_id(event_id)
     if not event:

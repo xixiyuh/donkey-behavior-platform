@@ -53,9 +53,7 @@ pnpm-debug.log*
 .idea/
 
 # ===== Project Specific =====
-# Model files
-models/
-!models/.gitkeep
+
 
 # Data files
 data/
