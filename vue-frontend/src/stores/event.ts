@@ -64,5 +64,20 @@ export const useEventStore = defineStore('event', {
         this.loading = false;
       }
     },
+
+    async fetchEventsByCamera(cameraId: number, page: number = 1) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await axios.get(`/api/cameras/${cameraId}/mating-events`, { params: { page } });
+        this.events = response.data.items;
+        this.total = response.data.total;
+      } catch (error) {
+        this.error = '鍔犺浇浜嬩欢鍒楄〃澶辫触';
+        console.error('Error fetching events by camera:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
   },
 });

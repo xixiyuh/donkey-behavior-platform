@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from ..models import MatingEvent
+from ..models import MatingEvent, Camera
 from ..schemas import MatingEvent as MatingEventSchema, MatingEventCreate
 
 # Keep router prefix empty so we can expose both collection and nested routes
@@ -96,6 +96,32 @@ def get_mating_events_by_pen(pen_id: int, page: int = 1, page_size: int = 10):
 @router.get("/barns/{barn_id}/mating-events")
 def get_mating_events_by_barn(barn_id: int, page: int = 1, page_size: int = 10):
     result = MatingEvent.get_by_barn(barn_id, page, page_size)
+    return {
+        "items": [{
+            "id": event["id"],
+            "camera_id": event["camera_id"],
+            "pen_id": event["pen_id"],
+            "barn_id": event["barn_id"],
+            "start_time": event["start_time"],
+            "end_time": event["end_time"],
+            "duration": event["duration"],
+            "avg_confidence": event["avg_confidence"],
+            "max_confidence": event["max_confidence"],
+            "screenshot": event["screenshot"],
+            "created_at": event["created_at"]
+        } for event in result['items']],
+        "total": result['total'],
+        "page": result['page'],
+        "page_size": result['page_size']
+    }
+
+@router.get("/cameras/{camera_id}/mating-events")
+def get_mating_events_by_camera(camera_id: int, page: int = 1, page_size: int = 10):
+    camera = Camera.get_by_id(camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    result = MatingEvent.get_by_camera(camera["camera_id"], page, page_size)
     return {
         "items": [{
             "id": event["id"],
