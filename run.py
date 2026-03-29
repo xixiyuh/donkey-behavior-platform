@@ -40,14 +40,14 @@ try:
         print("="*60)
         
         print("🔧 准备启动 uvicorn 服务...")
-        print("🔧 绑定地址：http://0.0.0.0:8000") 
+        print("🔧 绑定地址：http://0.0.0.0:8080") 
 
         try:
             # 使用简化配置，避免复杂的日志配置导致问题
             uvicorn.run(
                 app,
                 host="0.0.0.0",
-                port=8000,
+                port=8080,
                 log_config=None,  # 关键：禁用默认日志配置
                 access_log=False  # 暂时禁用访问日志
             )
