@@ -1,54 +1,44 @@
-<template>
+﻿<template>
   <div class="event-record">
     <h2>事件记录</h2>
 
     <div class="form-row">
       <div class="form-group">
         <label for="eventBarnId">养殖舍</label>
-        <select
-          id="eventBarnId"
-          v-model="selectedBarn"
-          @change="handleBarnChange"
-        >
-          <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
+        <select id="eventBarnId" v-model="selectedBarn" @change="handleBarnChange">
+          <option value="">全部养殖舍</option>
           <option
             v-for="barn in barnStore.allBarns"
             :key="barn.id"
-            :value="barn.id"
+            :value="String(barn.id)"
           >
             {{ barn.name }}
           </option>
         </select>
       </div>
+
       <div class="form-group">
-        <label for="eventPenId">栏</label>
-        <select
-          id="eventPenId"
-          v-model="selectedPen"
-          @change="handlePenChange"
-        >
-          <option value="" disabled selected style="color: #888;">请选择栏号</option>
+        <label for="eventPenId">养殖栏</label>
+        <select id="eventPenId" v-model="selectedPen" @change="handlePenChange">
+          <option value="">全部养殖栏</option>
           <option
             v-for="pen in pens"
             :key="pen.id"
-            :value="pen.id"
+            :value="String(pen.id)"
           >
             第{{ pen.pen_number }}栏
           </option>
         </select>
       </div>
+
       <div class="form-group">
         <label for="eventCameraId">摄像头</label>
-        <select
-          id="eventCameraId"
-          v-model="selectedCamera"
-          @change="loadEvents(currentPage)"
-        >
-          <option value="" disabled selected style="color: #888;">请选择摄像头</option>
+        <select id="eventCameraId" v-model="selectedCamera" @change="handleCameraChange">
+          <option value="">全部摄像头</option>
           <option
             v-for="camera in cameras"
             :key="camera.id"
-            :value="camera.id"
+            :value="String(camera.id)"
           >
             {{ camera.camera_id }}
           </option>
@@ -100,21 +90,26 @@
           </tr>
         </tbody>
       </table>
-      <!-- 分页控件 -->
+
       <div class="pagination">
         <button @click="changePage(1)" :disabled="currentPage === 1">首页</button>
         <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1">上一页</button>
         <span>{{ currentPage }} / {{ totalPages }}</span>
         <button @click="changePage(currentPage + 1)" :disabled="currentPage >= totalPages">下一页</button>
         <div class="page-jump">
-          <input type="number" v-model.number="jumpPage" min="1" :max="totalPages" style="width: 60px; margin: 0 10px;" />
+          <input
+            type="number"
+            v-model.number="jumpPage"
+            min="1"
+            :max="totalPages"
+            style="width: 60px; margin: 0 10px;"
+          />
           <button @click="jumpToPage">跳转</button>
         </div>
         <span class="total-records">共 {{ eventStore.total }} 条记录</span>
       </div>
     </div>
 
-    <!-- 图片放大模态框 -->
     <div v-if="showImageModal" class="image-modal" @click="closeImageModal">
       <div class="modal-content" @click.stop>
         <span class="close-btn" @click="closeImageModal">&times;</span>
@@ -125,12 +120,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
+import { useCameraStore } from '../stores/camera';
 import { useEventStore } from '../stores/event';
-import type { Barn, Pen, MatingEvent, Camera } from '../types';
+import type { Pen, Camera } from '../types';
 
 const barnStore = useBarnStore();
+const cameraStore = useCameraStore();
 const eventStore = useEventStore();
 
 const currentPage = ref(1);
@@ -142,12 +139,111 @@ const selectedBarn = ref<string>('');
 const selectedPen = ref<string>('');
 const selectedCamera = ref<string>('');
 
-// 计算总页数
+const showImageModal = ref(false);
+const currentImageUrl = ref('');
+
 const totalPages = computed(() => {
-  return Math.ceil(eventStore.total / 10);
+  return Math.max(1, Math.ceil(eventStore.total / 10));
 });
 
-// 跳转到指定页码
+const dedupeCameras = (list: Camera[]) => {
+  return Array.from(new Map(list.map((camera) => [camera.id, camera])).values());
+};
+
+const resetToFirstPage = () => {
+  currentPage.value = 1;
+  jumpPage.value = 1;
+};
+
+const loadBarns = async () => {
+  try {
+    await barnStore.fetchBarns();
+  } catch (err) {
+    console.error('Error loading barns:', err);
+  }
+};
+
+const loadPens = async () => {
+  if (!selectedBarn.value) {
+    pens.value = [];
+    selectedPen.value = '';
+    return;
+  }
+
+  try {
+    const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
+    pens.value = penList;
+  } catch (err) {
+    console.error('Error loading pens:', err);
+    pens.value = [];
+  }
+};
+
+const loadCameras = async (resetSelection: boolean = true) => {
+  if (resetSelection) {
+    selectedCamera.value = '';
+  }
+
+  try {
+    let list: Camera[] = [];
+
+    if (!selectedBarn.value) {
+      list = await cameraStore.fetchAllCameras();
+    } else if (selectedPen.value) {
+      list = await cameraStore.fetchCamerasByPen(Number(selectedPen.value));
+    } else {
+      list = await cameraStore.fetchCamerasByBarn(Number(selectedBarn.value));
+    }
+
+    cameras.value = dedupeCameras(list);
+  } catch (err) {
+    console.error('Error loading cameras:', err);
+    cameras.value = [];
+  }
+};
+
+const loadEvents = async (page: number = 1) => {
+  try {
+    if (selectedCamera.value) {
+      await eventStore.fetchEventsByCamera(Number(selectedCamera.value), page);
+    } else if (selectedPen.value) {
+      await eventStore.fetchEventsByPen(Number(selectedPen.value), page);
+    } else if (selectedBarn.value) {
+      await eventStore.fetchEventsByBarn(Number(selectedBarn.value), page);
+    } else {
+      await eventStore.fetchEvents(page);
+    }
+  } catch (err) {
+    console.error('Error loading events:', err);
+  }
+};
+
+const handleBarnChange = async () => {
+  selectedPen.value = '';
+  resetToFirstPage();
+  await loadPens();
+  await loadCameras(true);
+  await loadEvents(currentPage.value);
+};
+
+const handlePenChange = async () => {
+  resetToFirstPage();
+  await loadCameras(true);
+  await loadEvents(currentPage.value);
+};
+
+const handleCameraChange = async () => {
+  resetToFirstPage();
+  await loadEvents(currentPage.value);
+};
+
+const changePage = async (page: number) => {
+  if (page < 1 || page > totalPages.value) return;
+  currentPage.value = page;
+  jumpPage.value = page;
+  await loadEvents(page);
+};
+
 const jumpToPage = async () => {
   if (jumpPage.value < 1 || jumpPage.value > totalPages.value) {
     alert('请输入有效的页码');
@@ -157,89 +253,6 @@ const jumpToPage = async () => {
   await loadEvents(currentPage.value);
 };
 
-// 图片模态框相关变量
-const showImageModal = ref(false);
-const currentImageUrl = ref('');
-
-// 加载养殖舍列表
-const loadBarns = async () => {
-  try {
-    await barnStore.fetchBarns();
-  } catch (err) {
-    console.error('Error loading barns:', err);
-  }
-};
-
-// 加载栏列表
-const loadPens = async () => {
-  if (!selectedBarn.value) {
-    pens.value = [];
-    selectedPen.value = '';
-    loadCameras();
-    return;
-  }
-
-  try {
-    const penList = await barnStore.fetchBarnPens(parseInt(selectedBarn.value));
-    pens.value = penList;
-    selectedPen.value = '';
-    loadCameras();
-  } catch (err) {
-    console.error('Error loading pens:', err);
-  }
-};
-
-// 加载摄像头列表
-const loadCameras = async () => {
-  cameras.value = [];
-  selectedCamera.value = '';
-
-  if (!selectedBarn.value) {
-    return;
-  }
-
-  try {
-    // 这里需要添加获取摄像头列表的逻辑
-    // 暂时使用空数组，需要根据实际情况实现
-  } catch (err) {
-    console.error('Error loading cameras:', err);
-  }
-};
-
-// 处理养殖舍变更
-const handleBarnChange = async () => {
-  await loadPens();
-  loadEvents(currentPage.value);
-};
-
-// 处理栏变更
-const handlePenChange = async () => {
-  await loadCameras();
-  loadEvents(currentPage.value);
-};
-
-// 加载事件列表
-const loadEvents = async (page: number = 1) => {
-  try {
-    if (selectedPen.value) {
-      await eventStore.fetchEventsByPen(parseInt(selectedPen.value), page);
-    } else if (selectedBarn.value) {
-      await eventStore.fetchEventsByBarn(parseInt(selectedBarn.value), page);
-    } else {
-      await eventStore.fetchEvents(page);
-    }
-  } catch (err) {
-    console.error('Error loading events:', err);
-  }
-};
-
-const changePage = async (page: number) => {
-  if (page < 1) return;
-  currentPage.value = page;
-  await loadEvents(page);
-};
-
-// 格式化日期时间
 const formatDateTime = (dateTime: string): string => {
   const date = new Date(dateTime);
   return date.toLocaleString('zh-CN', {
@@ -249,55 +262,46 @@ const formatDateTime = (dateTime: string): string => {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false
+    hour12: false,
   });
 };
 
-// 获取养殖舍名称
 const getBarnName = (barnId: number): string => {
-  if (!Array.isArray(barnStore.allBarns)) {
-    return barnId.toString();
-  }
-  const barn = barnStore.allBarns.find(b => b.id === barnId);
-  return barn ? barn.name : barnId.toString();
+  const barn = barnStore.allBarns.find((b) => b.id === barnId);
+  return barn ? barn.name : String(barnId);
 };
 
-// 获取图片URL
 const getImageUrl = (screenshotPath: string): string => {
-  // 构建完整的图片URL
   if (!screenshotPath) return '';
   if (screenshotPath.startsWith('http://') || screenshotPath.startsWith('https://')) {
     return screenshotPath;
   }
   if (screenshotPath.startsWith('/')) {
-    return `http://localhost:8080${screenshotPath}`;
+    return `${window.location.origin}${screenshotPath}`;
   }
-  return `http://localhost:8080/${screenshotPath}`;
+  return `${window.location.origin}/${screenshotPath}`;
 };
 
-// 打开图片模态框
 const openImageModal = (imageUrl: string) => {
   currentImageUrl.value = imageUrl;
   showImageModal.value = true;
 };
 
-// 关闭图片模态框
 const closeImageModal = () => {
   showImageModal.value = false;
   currentImageUrl.value = '';
 };
 
-// 处理图片加载错误
 const handleImageError = (event: Event) => {
   const target = event.target as HTMLImageElement;
-  target.src = ''; // 清空src，显示alt文本
+  target.src = '';
   target.alt = '图片加载失败';
 };
 
-// 组件挂载时加载数据
 onMounted(async () => {
   await loadBarns();
-  loadEvents(currentPage.value);
+  await loadCameras(true);
+  await loadEvents(currentPage.value);
 });
 </script>
 
@@ -324,7 +328,8 @@ label {
   margin: 8px 0 4px;
 }
 
-input, select {
+input,
+select {
   width: 100%;
   padding: 10px;
   border-radius: 10px;
@@ -332,12 +337,6 @@ input, select {
   background: #172045;
   color: #e7e9ee;
   box-sizing: border-box;
-}
-
-.buttons {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 15px;
 }
 
 button {
@@ -378,7 +377,8 @@ table {
   table-layout: fixed;
 }
 
-th, td {
+th,
+td {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid #334;
@@ -390,47 +390,6 @@ th {
   color: #60a5fa;
 }
 
-th:nth-child(1), td:nth-child(1) {
-  width: 60px;
-}
-
-th:nth-child(2), td:nth-child(2) {
-  width: 150px;
-}
-
-th:nth-child(3), td:nth-child(3) {
-  width: 150px;
-}
-
-th:nth-child(4), td:nth-child(4) {
-  width: 100px;
-}
-
-th:nth-child(5), td:nth-child(5) {
-  width: 100px;
-}
-
-th:nth-child(6), td:nth-child(6) {
-  width: 100px;
-}
-
-th:nth-child(7), td:nth-child(7) {
-  width: 150px;
-}
-
-th:nth-child(8), td:nth-child(8) {
-  width: 100px;
-}
-
-th:nth-child(9), td:nth-child(9) {
-  width: 80px;
-}
-
-th:nth-child(10), td:nth-child(10) {
-  width: 100px;
-}
-
-/* 置信图样式 */
 .confidence-image {
   width: 100%;
   height: 100px;
@@ -456,14 +415,9 @@ th:nth-child(10), td:nth-child(10) {
   font-size: 12px;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
   .form-row {
     grid-template-columns: 1fr;
-  }
-
-  .buttons {
-    flex-direction: column;
   }
 
   button {
@@ -474,12 +428,12 @@ th:nth-child(10), td:nth-child(10) {
     font-size: 12px;
   }
 
-  th, td {
+  th,
+  td {
     padding: 6px 8px;
   }
 }
 
-/* 图片模态框样式 */
 .image-modal {
   position: fixed;
   top: 0;

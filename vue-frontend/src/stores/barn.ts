@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { Barn } from '../types';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = 'http://localhost:8080';
+axios.defaults.baseURL = '';
 
 export const useBarnStore = defineStore('barn', {
   state: () => ({

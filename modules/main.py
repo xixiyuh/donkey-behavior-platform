@@ -325,7 +325,6 @@ async def stop_camera_detection(config_id: int):
         return {"success": False, "message": str(e)}
 
 
-
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
 
@@ -380,6 +379,7 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
     def infer():
         last_fps = 0.0
         idx = 0
+        last_results = None  # 保存上一次的推理结果
         try:
             while not stop_event.is_set():
                 try:
@@ -392,8 +392,12 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                     if do_infer:
                         r, dt = det.infer_once(frame)
                         last_fps = 1.0 / dt if dt and dt > 0 else 0.0
+                        last_results = r  # 保存推理结果
+                    
+                    # 使用上一次的推理结果绘制检测框
+                    if last_results:
                         # 传递camera_id、pen_id和barn_id参数
-                        frame = det.annotate(frame, r, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
+                        frame = det.annotate(frame, last_results, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
                                              pen_id=stream.pen_id if hasattr(stream, 'pen_id') else None,
                                              barn_id=stream.barn_id if hasattr(stream, 'barn_id') else None)
 

@@ -8,6 +8,7 @@ import threading
 from typing import Optional
 
 from . import config as C
+from backend.database import get_db_connection
 
 
 class CameraStream:
@@ -254,6 +255,52 @@ class MPVPipeStream:
             pass
 
 
+def _resolve_camera_meta_from_db(value: str):
+    """
+    Resolve camera metadata from DB without relying on config.CAMERA_FLV_URLS.
+    Returns: (resolved_value, camera_id, pen_id, barn_id)
+    """
+    resolved_value = value
+    camera_id = None
+    pen_id = None
+    barn_id = None
+    if isinstance(value, str):
+        value = value.strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        for table in ("camera_configs", "cameras"):
+            cursor.execute(
+                f"SELECT camera_id, pen_id, barn_id, flv_url FROM {table} WHERE flv_url = ? ORDER BY id DESC LIMIT 1",
+                (value,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["flv_url"], row["camera_id"], row["pen_id"], row["barn_id"]
+
+        for table in ("camera_configs", "cameras"):
+            cursor.execute(
+                f"SELECT camera_id, pen_id, barn_id, flv_url FROM {table} WHERE camera_id = ? ORDER BY id DESC LIMIT 1",
+                (value,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row["flv_url"], row["camera_id"], row["pen_id"], row["barn_id"]
+    except Exception as e:
+        print(f"[STREAMS] DB metadata lookup failed: {e}", flush=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    return resolved_value, camera_id, pen_id, barn_id
+
+
 def open_source(kind: str, value: str):
     """打开输入源"""
     kind = (kind or "").lower()
@@ -276,15 +323,25 @@ def open_source(kind: str, value: str):
     
     # 从URL中提取信息（这里需要根据实际的URL格式进行调整）
     # 例如：从配置的FLV地址中查找对应的摄像头信息
-    for b_id, pens in C.CAMERA_FLV_URLS.items():
-        for p_id, urls in pens.items():
-            if value in urls:
-                barn_id = b_id
-                pen_id = p_id
-                camera_id = urls.index(value) + 1
+    if isinstance(value, str):
+        value = value.strip()
+
+    # Prefer DB-driven lookup from edited camera/camera-config records.
+    value, camera_id, pen_id, barn_id = _resolve_camera_meta_from_db(value)
+
+    camera_flv_urls = getattr(C, "CAMERA_FLV_URLS", {}) or {}
+    if camera_id is None and isinstance(camera_flv_urls, dict):
+        for b_id, pens in camera_flv_urls.items():
+            if not isinstance(pens, dict):
+                continue
+            for p_id, urls in pens.items():
+                if isinstance(urls, (list, tuple)) and value in urls:
+                    barn_id = b_id
+                    pen_id = p_id
+                    camera_id = urls.index(value) + 1
+                    break
+            if camera_id:
                 break
-        if camera_id:
-            break
 
     if kind == "camera":
         stream = CameraStream(value)

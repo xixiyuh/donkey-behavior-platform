@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { Camera, CameraConfig } from '../types';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = 'http://localhost:8080';
+axios.defaults.baseURL = '';
 
 export const useCameraStore = defineStore('camera', {
   state: () => ({
@@ -33,6 +33,70 @@ export const useCameraStore = defineStore('camera', {
       } catch (error) {
         this.error = '加载摄像头列表失败';
         console.error('Error fetching cameras:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchAllCameras(pageSize: number = 1000) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const allItems: Camera[] = [];
+        let page = 1;
+        let total = 0;
+
+        while (true) {
+          const response = await axios.get('/api/cameras', {
+            params: { page, page_size: pageSize },
+          });
+          const items: Camera[] = response.data.items || [];
+          total = response.data.total || 0;
+          allItems.push(...items);
+
+          if (items.length < pageSize || allItems.length >= total) {
+            break;
+          }
+          page += 1;
+        }
+
+        this.cameras = allItems;
+        this.total = total;
+        return allItems;
+      } catch (error) {
+        this.error = 'Failed to fetch all cameras';
+        console.error('Error fetching all cameras:', error);
+        return [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchCamerasByBarn(barnId: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await axios.get(`/api/cameras/barns/${barnId}/cameras`);
+        return response.data as Camera[];
+      } catch (error) {
+        this.error = 'Failed to fetch cameras by barn';
+        console.error('Error fetching cameras by barn:', error);
+        return [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchCamerasByPen(penId: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await axios.get(`/api/cameras/pens/${penId}/cameras`);
+        return response.data as Camera[];
+      } catch (error) {
+        this.error = 'Failed to fetch cameras by pen';
+        console.error('Error fetching cameras by pen:', error);
+        return [];
       } finally {
         this.loading = false;
       }

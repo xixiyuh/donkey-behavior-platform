@@ -1,0 +1,16 @@
+[Unit]
+Description=Realtime Detector Backend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/realtime-detector
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/var/www/realtime-detector/donkey_env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/var/www/realtime-detector/donkey_env/bin/python -m uvicorn modules.main:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

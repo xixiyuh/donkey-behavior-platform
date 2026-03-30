@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { MatingEvent } from '../types';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = 'http://localhost:8080';
+axios.defaults.baseURL = '';
 
 export const useEventStore = defineStore('event', {
   state: () => ({
@@ -60,6 +60,21 @@ export const useEventStore = defineStore('event', {
       } catch (error) {
         this.error = '加载事件列表失败';
         console.error('Error fetching events by barn:', error);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchEventsByCamera(cameraId: number, page: number = 1) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await axios.get(`/api/cameras/${cameraId}/mating-events`, { params: { page } });
+        this.events = response.data.items;
+        this.total = response.data.total;
+      } catch (error) {
+        this.error = '鍔犺浇浜嬩欢鍒楄〃澶辫触';
+        console.error('Error fetching events by camera:', error);
       } finally {
         this.loading = false;
       }

@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { UploadResponse } from '../types';
 
 // 设置axios的基础URL为后端服务器的地址
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = '';
 
 export function useApi() {
   const uploadFile = async (file: File): Promise<UploadResponse> => {

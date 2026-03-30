@@ -92,3 +92,26 @@ class MatingEvent:
             'page': page,
             'page_size': page_size
         }
+
+    @staticmethod
+    def get_by_camera(camera_id, page=1, page_size=10):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT COUNT(*) FROM mating_events WHERE camera_id = ?', (camera_id,))
+        total = cursor.fetchone()[0]
+
+        offset = (page - 1) * page_size
+        cursor.execute(
+            'SELECT * FROM mating_events WHERE camera_id = ? ORDER BY start_time DESC LIMIT ? OFFSET ?',
+            (camera_id, page_size, offset)
+        )
+        events = cursor.fetchall()
+        conn.close()
+
+        return {
+            'items': events,
+            'total': total,
+            'page': page,
+            'page_size': page_size
+        }
