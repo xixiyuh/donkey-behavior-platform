@@ -150,6 +150,28 @@ class CameraDetectionManager:
             stream = None
             result_queue = queue.Queue(maxsize=C.QUEUE_MAX)
             
+            def is_within_time_range():
+                """判断当前时间是否在摄像头配置的时间范围内"""
+                current_time = datetime.now().time()
+                start_time = datetime.strptime(camera_config.get('start_time', '09:00'), '%H:%M').time()
+                end_time = datetime.strptime(camera_config.get('end_time', '19:00'), '%H:%M').time()
+                return start_time <= current_time <= end_time
+            
+            def reconnect():
+                """尝试重新连接视频流"""
+                nonlocal stream
+                try:
+                    print(f"{get_timestamp()} [Detection] Attempting to reconnect to camera {config_id}")
+                    stream = open_source('flv', camera_config['flv_url'])
+                    # 设置摄像头、栏和舍的ID
+                    stream.camera_id = camera_config['camera_id']
+                    stream.pen_id = camera_config['pen_id']
+                    stream.barn_id = camera_config['barn_id']
+                    return True
+                except Exception as e:
+                    print(f"{get_timestamp()} [Detection] Reconnection failed for camera {config_id}: {e}")
+                    return False
+            
             try:
                 det = get_detector()
                 stream = open_source('flv', camera_config['flv_url'])
@@ -168,6 +190,58 @@ class CameraDetectionManager:
                     
             except Exception as e:
                 print(f"{get_timestamp()} [Detection] Error for camera {config_id}: {e}")
+                
+                # 自动重连逻辑
+                reconnect_attempts = 0
+                max_reconnect_attempts = 4
+                
+                # 第一次重连：10秒间隔，最多4次
+                while reconnect_attempts < max_reconnect_attempts and not stop_event.is_set():
+                    if not is_within_time_range():
+                        print(f"{get_timestamp()} [Detection] Camera {config_id} is outside time range, stopping reconnection")
+                        break
+                    
+                    print(f"{get_timestamp()} [Detection] Attempting to reconnect ({reconnect_attempts + 1}/{max_reconnect_attempts})...")
+                    time.sleep(10)  # 等待10秒
+                    
+                    if reconnect():
+                        print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
+                        # 重新启动处理线程
+                        t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                        # 继续运行
+                        while not stop_event.is_set():
+                            time.sleep(1)
+                        break
+                    
+                    reconnect_attempts += 1
+                
+                # 如果第一次重连失败，等待1小时后进行第二次重连
+                if reconnect_attempts >= max_reconnect_attempts and not stop_event.is_set():
+                    print(f"{get_timestamp()} [Detection] All initial reconnection attempts failed for camera {config_id}, waiting 1 hour...")
+                    time.sleep(3600)  # 等待1小时
+                    
+                    # 第二次重连：10秒间隔，最多3次
+                    reconnect_attempts = 0
+                    max_reconnect_attempts = 3
+                    
+                    while reconnect_attempts < max_reconnect_attempts and not stop_event.is_set():
+                        if not is_within_time_range():
+                            print(f"{get_timestamp()} [Detection] Camera {config_id} is outside time range, stopping reconnection")
+                            break
+                        
+                        print(f"{get_timestamp()} [Detection] Attempting to reconnect after 1 hour ({reconnect_attempts + 1}/{max_reconnect_attempts})...")
+                        time.sleep(10)  # 等待10秒
+                        
+                        if reconnect():
+                            print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
+                            # 重新启动处理线程
+                            t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                            # 继续运行
+                            while not stop_event.is_set():
+                                time.sleep(1)
+                            break
+                        
+                        reconnect_attempts += 1
             finally:
                 print(f"{get_timestamp()} [Detection] Stopping detection for camera {config_id}")
                 
@@ -325,6 +399,7 @@ async def stop_camera_detection(config_id: int):
         return {"success": False, "message": str(e)}
 
 
+
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
 
@@ -379,7 +454,7 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
     def infer():
         last_fps = 0.0
         idx = 0
-        last_results = None  # 保存上一次的推理结果
+        last_r = None  # 保存上一次的推理结果
         try:
             while not stop_event.is_set():
                 try:
@@ -391,15 +466,18 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                     do_infer = (idx % max(1, C.FRAME_INTERVAL) == 0)
                     if do_infer:
                         r, dt = det.infer_once(frame)
+                        last_r = r  # 保存推理结果
                         last_fps = 1.0 / dt if dt and dt > 0 else 0.0
-                        last_results = r  # 保存推理结果
-                    
-                    # 使用上一次的推理结果绘制检测框
-                    if last_results:
                         # 传递camera_id、pen_id和barn_id参数
-                        frame = det.annotate(frame, last_results, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
+                        frame = det.annotate(frame, r, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
                                              pen_id=stream.pen_id if hasattr(stream, 'pen_id') else None,
                                              barn_id=stream.barn_id if hasattr(stream, 'barn_id') else None)
+                    else:
+                        # 使用上一次的推理结果绘制检测框
+                        if last_r is not None:
+                            frame = det.annotate(frame, last_r, camera_id=stream.camera_id if hasattr(stream, 'camera_id') else None,
+                                                 pen_id=stream.pen_id if hasattr(stream, 'pen_id') else None,
+                                                 barn_id=stream.barn_id if hasattr(stream, 'barn_id') else None)
 
                     put_fps(frame, last_fps)
 

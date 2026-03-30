@@ -1,4 +1,3 @@
-# modules/detector_pt.py
 import time
 import numpy as np
 from ultralytics import YOLO
@@ -39,17 +38,16 @@ class PTDetector:
             track_id = ids[i] if ids is not None and i < len(ids) else None
 
             detections.append({
-                'bbox': bbox,
-                'confidence': conf,
-                'class': r.names[cls],
-                'track_id': track_id,
-                'timestamp': datetime.now()
+                "bbox": bbox,
+                "confidence": conf,
+                "class": r.names[cls],
+                "track_id": track_id,
+                "timestamp": datetime.now()
             })
 
         if camera_id and pen_id and barn_id:
             self.mating_detector.detect_mating(frame_bgr, detections, camera_id, pen_id, barn_id)
 
-        # 用你验证成功的绘制方式
         return r.plot(
             line_width=2,
             font_size=8,
