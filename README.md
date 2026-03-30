@@ -289,3 +289,225 @@ sudo systemctl enable certbot.timer
 - 可根据硬件性能调整MPV_PIPE_FPS参数
 - 对于低配置设备，可降低分辨率或帧率以提高性能
 - 考虑使用硬件加速解码以减少CPU占用
+
+## 项目框架结构
+
+### 整体架构
+```
+realtime-detector/
+├── backend/           # 后端代码
+├── data/              # 数据存储
+├── modules/           # 核心模块
+├── static/            # 静态文件
+├── uploads/           # 上传文件
+├── vue-frontend/      # 前端代码
+├── .env               # 环境变量
+├── requirements.txt   # 后端依赖
+└── README.md          # 项目文档
+```
+
+### 详细文件结构与作用
+
+#### 1. backend/ - 后端代码
+```
+backend/
+├── apis/             # API接口
+│   ├── barn.py       # 养殖舍相关API
+│   ├── camera.py     # 摄像头相关API
+│   ├── event.py      # 事件相关API
+│   ├── pen.py        # 栏相关API
+│   └── upload.py     # 文件上传API
+├── models/           # 数据模型
+│   ├── barn.py       # 养殖舍模型
+│   ├── camera.py     # 摄像头模型
+│   ├── event.py      # 事件模型
+│   └── pen.py        # 栏模型
+├── schemas/          # 数据验证
+│   ├── barn.py       # 养殖舍数据结构
+│   ├── camera.py     # 摄像头数据结构
+│   ├── event.py      # 事件数据结构
+│   └── pen.py        # 栏数据结构
+└── utils/            # 工具函数
+```
+
+**作用**：
+- `apis/`：提供RESTful API接口，处理前端请求
+- `models/`：定义数据库模型，处理数据存储和查询
+- `schemas/`：定义数据传输对象，验证请求和响应数据
+- `utils/`：提供通用工具函数，如数据库连接、文件处理等
+
+#### 2. data/ - 数据存储
+```
+data/
+└── farm.db           # SQLite数据库文件
+```
+
+**作用**：
+- 存储系统数据，包括养殖舍、栏、摄像头、事件等信息
+
+#### 3. modules/ - 核心模块
+```
+modules/
+├── config.py         # 配置文件
+├── detector.py       # 目标检测模块
+├── main.py           # 主应用入口
+└── utils.py          # 模块工具函数
+```
+
+**作用**：
+- `config.py`：定义系统配置参数，如队列大小、帧间隔等
+- `detector.py`：实现目标检测逻辑，包括模型加载、推理等
+- `main.py`：主应用入口，包含WebSocket处理、检测线程管理等
+- `utils.py`：提供模块级工具函数，如视频流处理、帧转换等
+
+#### 4. static/ - 静态文件
+```
+static/
+└── mating_screenshots/  # 交配事件截图
+```
+
+**作用**：
+- 存储事件截图，供前端展示
+
+#### 5. uploads/ - 上传文件
+```
+uploads/
+```
+
+**作用**：
+- 存储用户上传的视频和图片文件
+
+#### 6. vue-frontend/ - 前端代码
+```
+vue-frontend/
+├── public/           # 公共资源
+├── src/              # 源代码
+│   ├── assets/       # 静态资源
+│   ├── components/   # 组件
+│   │   ├── BarnSelect.vue       # 养殖舍选择组件
+│   │   ├── EventRecord.vue      # 事件记录组件
+│   │   └── PenSelect.vue        # 栏选择组件
+│   ├── composables/  # 组合式函数
+│   │   ├── useApi.ts           # API调用封装
+│   │   ├── useWebSocket.ts     # WebSocket封装
+│   │   └── useEventStore.ts    # 事件状态管理
+│   ├── pages/        # 页面
+│   │   ├── Detection.vue       # 检测页面
+│   │   ├── Events.vue          # 事件页面
+│   │   └── Settings.vue        # 设置页面
+│   ├── router/       # 路由
+│   ├── stores/       # 状态管理
+│   ├── types/        # TypeScript类型定义
+│   ├── App.vue       # 根组件
+│   └── main.ts       # 前端入口
+├── index.html        # HTML模板
+├── package.json      # 前端依赖
+└── vite.config.ts    # Vite配置
+```
+
+**作用**：
+- `components/`：前端组件，如养殖舍选择、事件记录等
+- `composables/`：组合式函数，封装API调用、WebSocket连接等
+- `pages/`：前端页面，如检测页面、事件页面等
+- `router/`：前端路由配置
+- `stores/`：前端状态管理
+
+### 核心功能模块
+
+#### 1. 实时检测模块
+- **位置**：`modules/main.py`
+- **功能**：处理视频流、目标检测、WebSocket通信
+- **关键函数**：
+  - `start_detection()`：启动检测线程
+  - `infer()`：执行目标检测推理
+  - `check_and_process_mating()`：检测和处理交配事件
+
+#### 2. 目标检测模块
+- **位置**：`modules/detector.py`
+- **功能**：加载模型、执行推理、绘制检测框
+- **关键函数**：
+  - `infer_once()`：执行单次推理
+  - `annotate()`：在帧上绘制检测结果
+
+#### 3. 事件管理模块
+- **位置**：`backend/models/event.py`
+- **功能**：管理交配事件的存储和查询
+- **关键函数**：
+  - `create()`：创建新事件
+  - `get_all()`：获取所有事件
+  - `get_by_camera()`：按摄像头获取事件
+
+#### 4. 前端API调用模块
+- **位置**：`vue-frontend/src/composables/useApi.ts`
+- **功能**：封装API调用，处理文件上传等
+- **关键函数**：
+  - `uploadFile()`：上传文件
+  - `getEvents()`：获取事件列表
+  - `deleteFile()`：删除文件
+
+#### 5. WebSocket通信模块
+- **位置**：`vue-frontend/src/composables/useWebSocket.ts`
+- **功能**：管理WebSocket连接，接收实时视频流
+- **关键函数**：
+  - `connect()`：建立WebSocket连接
+  - `disconnect()`：断开WebSocket连接
+  - `sendMessage()`：发送消息
+
+### 数据流
+
+1. **实时检测流程**：
+   - 前端选择摄像头 → 建立WebSocket连接 → 后端启动检测线程 → 处理视频流 → 执行目标检测 → 绘制检测结果 → 通过WebSocket推送帧数据 → 前端展示
+
+2. **文件上传流程**：
+   - 前端选择文件 → 调用uploadFile() → 后端接收文件 → 保存文件 → 执行检测 → 返回检测结果 → 前端展示
+
+3. **事件管理流程**：
+   - 后端检测到交配事件 → 保存事件到数据库 → 前端调用getEvents() → 后端返回事件列表 → 前端展示事件记录
+
+### 关键配置参数
+
+| 配置项 | 位置 | 作用 |
+|-------|------|------|
+| QUEUE_MAX | modules/config.py | 帧队列最大长度 |
+| FRAME_INTERVAL | modules/config.py | 推理帧间隔 |
+| MPV_PIPE_FPS | modules/config.py | 视频流处理帧率 |
+| MAX_FPS | modules/main.py | 最大推送帧率 |
+| CONF_THRESHOLD | modules/detector.py | 置信度阈值 |
+| MIN_EVENT_DURATION | modules/main.py | 最小事件持续时间 |
+
+### 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+| 后端 | Python | 3.8+ | 核心逻辑实现 |
+| 后端框架 | FastAPI | 0.104+ | API接口和WebSocket |
+| 前端 | Vue | 3.3+ | 前端界面 |
+| 前端状态管理 | Pinia | 2.1+ | 状态管理 |
+| 数据库 | SQLite | 3.35+ | 数据存储 |
+| 视频处理 | mpv | 0.35+ | 视频流获取和处理 |
+| 目标检测 | YOLO | v8 | 目标检测模型 |
+| 部署 | Nginx | 1.18+ | 反向代理 |
+
+### 排查指南
+
+1. **实时检测问题**：
+   - 检查WebSocket连接是否正常
+   - 查看后端日志中的检测结果
+   - 验证视频流地址是否正确
+
+2. **文件上传问题**：
+   - 检查Nginx配置中的文件大小限制
+   - 查看后端日志中的上传错误
+   - 验证文件路径权限
+
+3. **事件记录问题**：
+   - 检查数据库连接是否正常
+   - 查看事件保存逻辑
+   - 验证事件查询API是否正确
+
+4. **性能问题**：
+   - 调整帧间隔和推理频率
+   - 检查CPU和内存使用情况
+   - 优化视频流处理参数
+
+通过以上项目框架的整理，您可以更清晰地了解系统的结构和功能，便于排查和理解各个模块的作用。
