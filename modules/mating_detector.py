@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
 from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES
+from .contract_detector import get_contract_detector
 
 class MatingDetector:
     def __init__(self):
@@ -175,6 +176,16 @@ class MatingDetector:
             else:
                 # 如果索引超出范围，使用最后一张截图
                 screenshot = event['screenshots'][-1]
+        
+        # 使用contract detector进行二次检测
+        if screenshot:
+            # 转换相对路径为绝对路径
+            screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
+            contract_detector = get_contract_detector()
+            is_mating = contract_detector.predict(screenshot_path)
+            if not is_mating:
+                print(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+                return
         
         # 记录到数据库
         try:
