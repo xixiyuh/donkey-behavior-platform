@@ -12,6 +12,7 @@ IOU_THRES = 0.45
 # ------- 事件检测参数 -------
 MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
 MATING_CONF_THRES = 0.4  # mating检测的置信度阈值
+MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
 
 # ✅ Windows 先跑 .pt
 PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt")  # ←改成你的真实路径也行

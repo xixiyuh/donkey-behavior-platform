@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES
+from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES
 
 class MatingDetector:
     def __init__(self):
@@ -158,6 +158,11 @@ class MatingDetector:
         confidences = [d['confidence'] for d in event['detections']]
         avg_confidence = np.mean(confidences) if confidences else 0
         max_confidence = max(confidences) if confidences else 0
+        
+        # 检查平均置信度是否达到阈值
+        if avg_confidence < MATING_AVG_CONF_THRES:
+            print(f"Mating event skipped (average confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}")
+            return
         
         # 选择置信度最高的截图
         screenshot = None
