@@ -12,7 +12,7 @@ IOU_THRES = 0.45
 # ------- 事件检测参数 -------
 MATING_EVENT_MIN_DURATION = 6
 MATING_CONF_THRES = 0.4
-
+MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
 # Linux 服务器使用 .pt 模型
 PT_MODEL_PATH = str(BASE_DIR / "models" / "0710-best-YOLO.pt")
 
