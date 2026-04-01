@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 DB_PATH = PROJECT_ROOT / "data" / "farm.db"
-MODEL_PATH = PROJECT_ROOT / "models" / "bestResNet.pt"
+MODEL_PATH = PROJECT_ROOT / "models" / "contract-best.pt"
 
 
 def resize_with_padding(img, target_size=(224, 224)):
