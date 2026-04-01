@@ -5,8 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MIN_WIDTH, MIN_HEIGHT
-from .contract_detector import get_contract_detector
+from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MATING_MAX_CONF_THRES, MIN_WIDTH, MIN_HEIGHT, MATING_COOLDOWN_PERIOD
 
 # 尝试导入日志配置，如果不存在则使用默认值
 try:
@@ -126,38 +125,41 @@ class MatingDetector:
                             'screenshots': [],
                             'camera_id': camera_id,
                             'pen_id': pen_id,
-                            'barn_id': barn_id
+                            'barn_id': barn_id,
+                            'last_detection_time': datetime.now(),  # 记录最后检测时间
+                            'max_confidence': detection['confidence']
                         }
                         
                         # 保存第一张截图
                         self.save_screenshot(frame, detection, event_key, 0)
+                        
                     else:
                         # 更新现有的mating事件
                         event = self.current_mating_events[event_key]
                         event['detections'].append(detection)
+                        event['last_detection_time'] = datetime.now()  # 更新最后检测时间
                         print(f"Updating event: {event_key}, detection count: {len(event['detections'])}")
                         
-                        # 保存置信度更高的截图（最多保存3张）
-                        if len(event['screenshots']) < 3:
-                            self.save_screenshot(frame, detection, event_key, len(event['screenshots']))
-                        else:
-                            # 检查是否有比现有截图置信度更高的
-                            current_confidences = [d['confidence'] for d in event['detections'][:3]]
-                            if current_confidences:
-                                current_min_conf = min(current_confidences)
-                                if detection['confidence'] > current_min_conf:
-                                    # 替换置信度最低的截图
-                                    min_idx = np.argmin(current_confidences)
-                                    self.save_screenshot(frame, detection, event_key, min_idx)
+                        # 只保存置信度最高的截图（只保存1张）
+                        if detection['confidence'] > event['max_confidence']:
+                            # 更新最高置信度
+                            event['max_confidence'] = detection['confidence']
+                            # 保存新的截图，替换旧的
+                            self.save_screenshot(frame, detection, event_key, 0)
         else:
             # 没有mating检测结果，检查是否有正在进行的mating事件需要结束
             # 构建基础事件键前缀
             base_event_key = f"{camera_id}_{pen_id}_{barn_id}_"
             # 找出所有以该前缀开头的事件键
             event_keys_to_remove = []
+            current_time = datetime.now()
             for event_key in self.current_mating_events:
                 if event_key.startswith(base_event_key):
-                    event_keys_to_remove.append(event_key)
+                    event = self.current_mating_events[event_key]
+                    # 检查最后检测时间，只有超过冷却期才结束事件
+                    last_detection_time = event.get('last_detection_time', event['start_time'])
+                    if (current_time - last_detection_time).total_seconds() > MATING_COOLDOWN_PERIOD:  # 冷却期
+                        event_keys_to_remove.append(event_key)
             
             # 结束这些事件
             print(f"Ending events: {event_keys_to_remove}")
@@ -195,9 +197,20 @@ class MatingDetector:
         # 生成相对于静态文件目录的路径，用于前端访问
         relative_path = f"/static/mating_screenshots/{filename}"
         
-        # 更新事件的截图列表
+        # ，并删除旧的截图文件，并删除旧的截图文件
         event = self.current_mating_events[event_key]
         if index < len(event['screenshots']):
+            # 删除旧的截图文件
+            old_screenshot = event['screenshots'][index]
+            if old_screenshot:
+                old_screenshot_path = os.path.join(os.path.dirname(__file__), "..", old_screenshot.lstrip("/"))
+                if os.path.exists(old_screenshot_path):
+                    try:
+                        os.remove(old_screenshot_path)
+                        self._log(f"Deleted old screenshot: {old_screenshot_path}")
+                    except Exception as e:
+                        self._log(f"Error deleting old screenshot {old_screenshot_path}: {e}")
+            # 更新截图路径
             event['screenshots'][index] = relative_path
         else:
             event['screenshots'].append(relative_path)
@@ -235,18 +248,18 @@ class MatingDetector:
            # 删除所有截图
            self._cleanup_screenshots(event['screenshots'])
            return
+
+        # 检查最高置信度是否达到阈值
+        if max_confidence < MATING_MAX_CONF_THRES:
+            self._log(f"Mating event skipped (max confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, max_conf={max_confidence:.2f}")
+            # 删除所有截图
+            self._cleanup_screenshots(event['screenshots'])
+            return
         
         # 选择置信度最高的截图
         screenshot = None
         if event['screenshots']:
-            # 找出最大置信度对应的截图
-            max_conf_index = confidences.index(max_confidence)
-            # 确保索引在有效范围内
-            if max_conf_index < len(event['screenshots']):
-                screenshot = event['screenshots'][max_conf_index]
-            else:
-                # 如果索引超出范围，使用最后一张截图
-                screenshot = event['screenshots'][-1]
+            screenshot = event['screenshots'][0]  # 只保存了1张，直接使用
 
         # 检查截图尺寸
         if screenshot:
@@ -269,23 +282,23 @@ class MatingDetector:
                     # 删除所有截图
                     self._cleanup_screenshots(event['screenshots'])
                     return
-            else:
-                self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+        else:
+            self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+            # 删除所有截图
+            self._cleanup_screenshots(event['screenshots'])
+            return
+
+        # 使用contract detector进行二次检测(暂时禁用)
+        if screenshot:
+            # 转换相对路径为绝对路径
+            screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
+            contract_detector = get_contract_detector()
+            is_mating = contract_detector.predict(screenshot_path)
+            if not is_mating:
+                self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
                 # 删除所有截图
                 self._cleanup_screenshots(event['screenshots'])
                 return
-
-        # 使用contract detector进行二次检测(暂时禁用)
-        # if screenshot:
-        #     # 转换相对路径为绝对路径
-        #     screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
-        #     contract_detector = get_contract_detector()
-        #     is_mating = contract_detector.predict(screenshot_path)
-        #     if not is_mating:
-        #         self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
-        #         # 删除所有截图
-        #         self._cleanup_screenshots(event['screenshots'])
-        #         return
         
         # 记录到数据库
         try:
@@ -319,6 +332,9 @@ class MatingDetector:
             duration = (current_time - event['start_time']).total_seconds()
             # 如果事件持续时间超过超时时间，结束事件
             if duration > timeout:
+                keys_to_remove.append(event_key)
+            # 检查最后检测时间，超过冷却期也结束事件
+            elif (current_time - event.get('last_detection_time', event['start_time'])).total_seconds() > MATING_COOLDOWN_PERIOD:
                 keys_to_remove.append(event_key)
         
         for key in keys_to_remove:

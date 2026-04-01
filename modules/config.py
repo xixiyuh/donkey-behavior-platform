@@ -12,13 +12,16 @@ IOU_THRES = 0.45
 # ------- 事件检测参数 -------
 MATING_EVENT_MIN_DURATION = 6
 MATING_CONF_THRES = 0.4
-MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
+MATING_AVG_CONF_THRES = 0.7  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
+MATING_MAX_CONF_THRES = 0.9  # mating事件最高置信度阈值，只有超过此阈值的事件才会被记录
+MATING_COOLDOWN_PERIOD = 2  # mating事件冷却期（秒），连续多帧没有检测到时才结束事件
+
 # ------- 日志配置 -------
 LOG_DIR = str(BASE_DIR / "logs")  # 日志目录
 MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")  # mating事件日志文件
 
 # ------- 对比学习模型 -------
-CONTRACT_MODEL_PATH = str(BASE_DIR / "models" / "bestResNet.pt")  # 对比学习模型路径
+CONTRACT_MODEL_PATH = str(BASE_DIR / "models" / "contract-best.pt")  # 对比学习模型路径
 # Linux 服务器使用yolo .pt 模型
 PT_MODEL_PATH = str(BASE_DIR / "models" / "0710-best-YOLO.pt")
 
@@ -27,8 +30,8 @@ MIN_WIDTH = 80  # 截图最小宽度
 MIN_HEIGHT = 80  # 截图最小高度
 
 # ------- 本地流水线 / WS -------
-MAX_FPS = 10
-FRAME_INTERVAL = 2      #每隔多少帧
+MAX_FPS = 15
+FRAME_INTERVAL = 5      #每 FRAME_INTERVAL 帧进行一次检测
 JPEG_QUALITY = 60
 QUEUE_MAX = 2
 
