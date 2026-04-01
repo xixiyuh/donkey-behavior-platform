@@ -5,15 +5,81 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES
+from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MIN_WIDTH, MIN_HEIGHT
 from .contract_detector import get_contract_detector
+
+# 尝试导入日志配置，如果不存在则使用默认值
+try:
+    from .config import MATING_LOG_FILE, LOG_DIR
+except ImportError:
+    import os
+    from pathlib import Path
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    LOG_DIR = str(BASE_DIR / "logs")
+    MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")
+    print(f"Warning: LOG_DIR and MATING_LOG_FILE not found in config.py, using default values: LOG_DIR={LOG_DIR}, MATING_LOG_FILE={MATING_LOG_FILE}")
 
 class MatingDetector:
     def __init__(self):
         self.current_mating_events = {}
         self.screenshots_dir = os.path.join(os.path.dirname(__file__), '..', 'static', 'mating_screenshots')
         os.makedirs(self.screenshots_dir, exist_ok=True)
+                # 初始化日志目录
+        os.makedirs(LOG_DIR, exist_ok=True)
+        # 确保日志文件存在
+        open(MATING_LOG_FILE, 'a').close()
     
+    def _log(self, message):
+        """
+        记录日志到文件和控制台
+        """
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"[{timestamp}] {message}"
+        # 输出到控制台
+        print(log_message)
+        # 写入日志文件
+        try:
+            with open(MATING_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(log_message + '\n')
+        except Exception as e:
+            print(f"Error writing to log file: {e}")
+    
+    def _cleanup_logs(self):
+        """
+        每天清理一次日志文件
+        """
+        try:
+            # 检查日志文件是否存在
+            if os.path.exists(MATING_LOG_FILE):
+                # 获取文件创建时间
+                file_stat = os.stat(MATING_LOG_FILE)
+                create_time = datetime.fromtimestamp(file_stat.st_ctime)
+                # 计算文件年龄（天数）
+                days_old = (datetime.now() - create_time).days
+                 # 如果文件超过1天，则清理
+                if days_old >= 1:
+                    # 直接删除并创建新的空日志文件
+                    os.remove(MATING_LOG_FILE)
+                    # 创建新的空日志文件
+                    open(MATING_LOG_FILE, 'w').close()
+                    self._log(f"Log file cleaned up (超过1天)")
+        except Exception as e:
+            print(f"Error cleaning up logs: {e}")
+    def _cleanup_screenshots(self, screenshots):
+        """
+        清理删除所有截图
+        """
+        for screenshot in screenshots:
+            # 转换相对路径为绝对路径
+            screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
+            # 检查文件是否存在并删除
+            if os.path.exists(screenshot_path):
+                try:
+                    os.remove(screenshot_path)
+                    self._log(f"Deleted screenshot: {screenshot_path}")
+                except Exception as e:
+                    self._log(f"Error deleting screenshot {screenshot_path}: {e}")
+                                                                                             
     def detect_mating(self, frame, detections, camera_id, pen_id, barn_id):
         """
         检测mating事件并记录
@@ -148,11 +214,15 @@ class MatingDetector:
         # 计算事件持续时间（秒）
         end_time = datetime.now()
         duration = int((end_time - event['start_time']).total_seconds())
-        print(f"Event duration: {duration}s")
+        self._log(f"Event duration: {duration}s")
+        # 检查并清理日志文件（每周一次）
+        self._cleanup_logs()
         
         # 检查事件持续时间是否达到阈值
         if duration < MATING_EVENT_MIN_DURATION:
-            print(f"Mating event skipped (duration too short): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s")
+            self._log(f"Mating event skipped (duration too short): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s")
+            # 删除所有截图
+            self._cleanup_screenshots(event['screenshots'])
             return
         
         # 计算平均置信度和最大置信度
@@ -161,8 +231,10 @@ class MatingDetector:
         max_confidence = max(confidences) if confidences else 0
         # 检查平均置信度是否达到阈值
         if avg_confidence < MATING_AVG_CONF_THRES:
-            print(f"Mating event skipped (average confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}")
-            return
+           self._log(f"Mating event skipped (average confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}")
+           # 删除所有截图
+           self._cleanup_screenshots(event['screenshots'])
+           return
         
         # 选择置信度最高的截图
         screenshot = None
@@ -175,7 +247,34 @@ class MatingDetector:
             else:
                 # 如果索引超出范围，使用最后一张截图
                 screenshot = event['screenshots'][-1]
-                
+
+        # 检查截图尺寸
+        if screenshot:
+            # 转换相对路径为绝对路径
+            screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
+            # 检查文件是否存在
+            if os.path.exists(screenshot_path):
+                # 读取图片并检查尺寸
+                try:
+                    img = cv2.imread(screenshot_path)
+                    if img is not None:
+                        height, width = img.shape[:2]
+                        if width < MIN_WIDTH or height < MIN_HEIGHT:
+                            self._log(f"Mating event skipped (screenshot size too small): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, size={width}x{height}")
+                            # 删除所有截图
+                            self._cleanup_screenshots(event['screenshots'])
+                            return
+                except Exception as e:
+                    self._log(f"Error checking screenshot size: {e}")
+                    # 删除所有截图
+                    self._cleanup_screenshots(event['screenshots'])
+                    return
+            else:
+                self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+                # 删除所有截图
+                self._cleanup_screenshots(event['screenshots'])
+                return
+
         # 使用contract detector进行二次检测
         if screenshot:
             # 转换相对路径为绝对路径
@@ -183,7 +282,9 @@ class MatingDetector:
             contract_detector = get_contract_detector()
             is_mating = contract_detector.predict(screenshot_path)
             if not is_mating:
-                print(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+                self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+                # 删除所有截图
+                self._cleanup_screenshots(event['screenshots'])
                 return
         
         # 记录到数据库
@@ -199,9 +300,9 @@ class MatingDetector:
                   screenshot))
             conn.commit()
             conn.close()
-            print(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
+            self._log(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}")
         except Exception as e:
-            print(f"Error recording event: {e}")
+            self._log(f"Error recording event: {e}")
     
     def check_timeout_events(self, timeout=30):
         """
