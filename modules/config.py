@@ -18,7 +18,7 @@ LOG_DIR = str(BASE_DIR / "logs")  # 日志目录
 MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")  # mating事件日志文件
 
 # ------- 对比学习模型 -------
-CONTRACT_MODEL_PATH = str(BASE_DIR / "models" / "bestResNetpt")  # 对比学习模型路径
+CONTRACT_MODEL_PATH = str(BASE_DIR / "models" / "bestResNet.pt")  # 对比学习模型路径
 # Linux 服务器使用yolo .pt 模型
 PT_MODEL_PATH = str(BASE_DIR / "models" / "0710-best-YOLO.pt")
 
@@ -28,7 +28,7 @@ MIN_HEIGHT = 80  # 截图最小高度
 
 # ------- 本地流水线 / WS -------
 MAX_FPS = 10
-FRAME_INTERVAL = 2
+FRAME_INTERVAL = 2      #每隔多少帧
 JPEG_QUALITY = 60
 QUEUE_MAX = 2
 

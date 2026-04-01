@@ -1,3 +1,4 @@
+
 # modules/contract_detector.py
 import os
 import torch
@@ -17,22 +18,43 @@ class FeatureExtractorResNet(nn.Module):
     def __init__(self, pretrained=True):
         super(FeatureExtractorResNet, self).__init__()
         # 使用ResNet18作为特征提取器
-        self.resnet = models.resnet18(pretrained=pretrained)
-        # 移除最后的全连接层
-        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])
+        base = models.resnet18(pretrained=pretrained)
         
-        # 添加分类头
-        self.fc = nn.Linear(512, 1)
+        # 对齐checkpoint里的features.*
+        self.features = nn.Sequential(*list(base.children())[:-1])  # [B, 512, 1, 1]
+        
+        # 对齐checkpoint里的attention.*
+        self.attention = nn.Sequential(
+            nn.Conv2d(512, 64, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(64, 1, kernel_size=1, stride=1, padding=0),
+            nn.Sigmoid(),
+        )
+        
+        # 对齐checkpoint里的classifier.*
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            
+            nn.Linear(256, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            
+            nn.Linear(64, 1),
+        )
         
     def forward(self, x):
         # 特征提取
-        features = self.resnet(x)
-        features = features.view(features.size(0), -1)
+        feats = self.features(x)               # [B, 512, 1, 1]
+        attn = self.attention(feats)           # [B, 1, 1, 1]
+        feats = feats * attn                   # [B, 512, 1, 1]
+        feats = feats.view(feats.size(0), -1) # [B, 512]
+        logits = self.classifier(feats)        # [B, 1]
         
-        # 分类
-        output = self.fc(features)
-        
-        return output, features
+        return logits, feats
 
 
 def _resize_with_padding(img, target_size):
@@ -63,13 +85,25 @@ def _resize_with_padding(img, target_size):
 def load_model_and_threshold(model_path, device):
     print(f"加载模型: {model_path}")
     checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    state = checkpoint["model_state_dict"]
 
     model = FeatureExtractorResNet(pretrained=False).to(device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
+
+    # 过滤状态字典，只保留需要的键
+    filtered_state = {
+        k: v for k, v in state.items()
+        if k.startswith("features.") or k.startswith("classifier.") or k.startswith("attention.")
+    }
+
+    # 加载状态字典，允许缺失键
+    missing, unexpected = model.load_state_dict(filtered_state, strict=False)
 
     threshold = checkpoint.get("threshold", 0.5)
     print(f"模型加载成功，最佳阈值: {threshold:.4f}")
+    print(f"缺失的键: {missing}")
+    print(f"意外的键: {unexpected}")
+
+    model.eval()
 
     return model, threshold
 

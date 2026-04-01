@@ -275,17 +275,17 @@ class MatingDetector:
                 self._cleanup_screenshots(event['screenshots'])
                 return
 
-        # 使用contract detector进行二次检测
-        if screenshot:
-            # 转换相对路径为绝对路径
-            screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
-            contract_detector = get_contract_detector()
-            is_mating = contract_detector.predict(screenshot_path)
-            if not is_mating:
-                self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
-                # 删除所有截图
-                self._cleanup_screenshots(event['screenshots'])
-                return
+        # 使用contract detector进行二次检测(暂时禁用)
+        # if screenshot:
+        #     # 转换相对路径为绝对路径
+        #     screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
+        #     contract_detector = get_contract_detector()
+        #     is_mating = contract_detector.predict(screenshot_path)
+        #     if not is_mating:
+        #         self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+        #         # 删除所有截图
+        #         self._cleanup_screenshots(event['screenshots'])
+        #         return
         
         # 记录到数据库
         try:
