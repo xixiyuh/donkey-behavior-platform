@@ -12,6 +12,7 @@ IOU_THRES = 0.45
 # ------- 事件检测参数 -------
 MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
 MATING_CONF_THRES = 0.4  # mating检测的置信度阈值
+MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
 MATING_MAX_CONF_THRES = 0.9  # mating事件最高置信度阈值，只有超过此阈值的事件才会被记录
 MATING_COOLDOWN_PERIOD = 2  # mating事件冷却期（秒），连续多帧没有检测到时才结束事件
 MATING_MIN_MOVEMENT = 50  # 最小移动距离阈值（像素），只有超过此阈值的事件才会被记录
@@ -33,7 +34,7 @@ PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detecto
 
 # ------- 本地流水线 / WS -------
 MAX_FPS = 20            # 本地接收最大帧率
-FRAME_INTERVAL = 5      # 1表示每秒都做检测
+FRAME_INTERVAL = 1      # 1表示每秒都做检测
 JPEG_QUALITY = 60       # JPEG质量，值越高质量越好（0-100）
 QUEUE_MAX = 2            # 本地流水线队列最大帧数
 

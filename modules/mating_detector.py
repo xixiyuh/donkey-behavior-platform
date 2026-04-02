@@ -139,7 +139,7 @@ class MatingDetector:
         new_relative_path = f"/static/mating_screenshots/{filename}"
         return new_relative_path
                                                                                               
-    def detect_mating(self, frame, detections, camera_id, pen_id, barn_id):
+    def detect_mating(self, frame, detections, camera_id=None, pen_id=None, barn_id=None):
         """
         检测mating事件并记录
         
@@ -150,6 +150,14 @@ class MatingDetector:
             pen_id: 栏ID
             barn_id: 舍ID
         """
+        # 设置默认值，用于本地视频检测
+        if camera_id is None:
+            camera_id = "-1"
+        if pen_id is None:
+            pen_id = -1
+        if barn_id is None:
+            barn_id = -1
+        
         # 检查超时事件
         self.check_timeout_events()
         
@@ -172,7 +180,7 @@ class MatingDetector:
                 if track_id is not None:
                     # 构建事件键，包含track_id以区分不同的mating事件
                     # 优化事件键，使用简洁的标识符
-                    camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id else 'unknown'
+                    camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id and camera_id != "-1" else 'local'
                     event_key = f"{camera_key}_{pen_id}_{barn_id}_{track_id}"
                     print(f"Event key: {event_key}")
                     
