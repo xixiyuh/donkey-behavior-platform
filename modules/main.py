@@ -305,12 +305,12 @@ register_stop_detection_func(stop_detection_wrapper)
 
 # 定时任务函数
 def start_all_detections():
-    """启动所有启用的摄像头检测"""
+    """启动所有应该激活的摄像头检测"""
     print(f"{get_timestamp()} [Scheduler] Starting all detections")
     
     try:
-        configs = CameraConfig.get_enabled()
-        print(f"{get_timestamp()} [Scheduler] Found {len(configs)} enabled cameras")
+        configs = CameraConfig.get_active()
+        print(f"{get_timestamp()} [Scheduler] Found {len(configs)} active cameras")
         
         for config in configs:
             detection_manager.start_detection(config)
