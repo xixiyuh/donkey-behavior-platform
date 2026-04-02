@@ -57,6 +57,7 @@ pnpm-debug.log*
 
 # Data files
 data/
+static/
 !data/.gitkeep
 
 # Output files
