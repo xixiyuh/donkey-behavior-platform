@@ -51,6 +51,14 @@
           <input v-model="newCamera.end_time" type="time" placeholder="结束时间">
         </div>
       </div>
+      <div class="form-group">
+        <label>状态</label>
+        <select v-model="newCamera.status">
+          <option value="1">启用</option>
+          <option value="2">自动</option>
+          <option value="0">禁用</option>
+        </select>
+      </div>
       <button @click="addCamera">添加摄像头配置</button>
     </div>
 
@@ -78,11 +86,13 @@
             <td>{{ getBarnName(camera.barn_id) }}</td>
             <td>{{ camera.pen_id }}</td>
             <td>{{ camera.start_time }} - {{ camera.end_time }}</td>
-            <td>{{ camera.enable ? '启用' : '禁用' }}</td>
+            <td>{{ getStatusText(camera.status) }}</td>
             <td>
-              <button @click="toggleCamera(camera.id)">
-                {{ camera.enable ? '禁用' : '启用' }}
-              </button>
+              <select v-model.number="camera.status" @change="updateCameraStatus(camera.id, camera.status)" style="margin-right: 10px;">
+                <option :value="1">启用</option>
+                <option :value="2">自动</option>
+                <option :value="0">禁用</option>
+              </select>
               <button @click="deleteCamera(camera.id)">删除</button>
             </td>
           </tr>
@@ -147,7 +157,8 @@ const newCamera = ref({
   barn_id: '',
   pen_id: '',
   start_time: '09:00',
-  end_time: '19:00'
+  end_time: '19:00',
+  status: 1
 });
 
 const selectedCameraId = ref('');
@@ -269,7 +280,8 @@ const addCamera = async () => {
       barn_id: parseInt(newCamera.value.barn_id.toString()),
       pen_id: parseInt(newCamera.value.pen_id.toString()),
       start_time: newCamera.value.start_time,
-      end_time: newCamera.value.end_time
+      end_time: newCamera.value.end_time,
+      status: parseInt(newCamera.value.status.toString())
     });
     await loadCameraConfigs();
     // 重置表单
@@ -279,7 +291,8 @@ const addCamera = async () => {
       barn_id: '',
       pen_id: '',
       start_time: '09:00',
-      end_time: '19:00'
+      end_time: '19:00',
+      status: 1
     };
     selectedCameraId.value = '';
     pens.value = [];
@@ -289,16 +302,18 @@ const addCamera = async () => {
   }
 };
 
-// 切换摄像头状态
-const toggleCamera = async (id: number) => {
+// 更新摄像头状态
+const updateCameraStatus = async (id: number, status: any) => {
   try {
-    await cameraStore.toggleCameraConfig(id);
+    // 确保status是数字类型
+    const statusNum = parseInt(status.toString(), 10);
+    await cameraStore.setCameraConfigStatus(id, statusNum);
 
     // 加载更新后的配置
     await loadCameraConfigs();
   } catch (err: any) {
-    console.error('Error toggling camera config:', err);
-    alert('切换摄像头状态失败: ' + (err.response?.data?.detail || err.message));
+    console.error('Error updating camera config status:', err);
+    alert('更新摄像头状态失败: ' + (err.response?.data?.detail || err.message));
   }
 };
 
@@ -311,9 +326,9 @@ const deleteCamera = async (id: number) => {
   try {
     // 找到该摄像头配置
     const camera = cameraConfigs.value.find(c => c.id === id);
-    if (camera && camera.enable) {
+    if (camera && camera.status === 1) {
       // 如果启用，先禁用
-      await cameraStore.toggleCameraConfig(id);
+      await cameraStore.setCameraConfigStatus(id, 0);
     }
 
     // 删除摄像头配置
@@ -332,6 +347,16 @@ const getBarnName = (barnId: number): string => {
   }
   const barn = barns.value.find(b => b.id === barnId);
   return barn ? barn.name : barnId.toString();
+};
+
+// 获取状态文本
+const getStatusText = (status: number): string => {
+  switch (status) {
+    case 0: return '禁用';
+    case 1: return '启用';
+    case 2: return '自动';
+    default: return '未知';
+  }
 };
 
 // 监听养殖舍变化，加载对应栏列表

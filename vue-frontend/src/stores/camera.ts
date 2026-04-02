@@ -177,6 +177,7 @@ export const useCameraStore = defineStore('camera', {
       pen_id: number;
       start_time: string;
       end_time: string;
+      status: number;
     }) {
       this.loading = true;
       this.error = null;
@@ -192,18 +193,18 @@ export const useCameraStore = defineStore('camera', {
       }
     },
 
-    async toggleCameraConfig(configId: number) {
+    async setCameraConfigStatus(configId: number, status: number) {
       this.loading = true;
       this.error = null;
       try {
-        await axios.patch(`/api/camera-configs/${configId}/toggle`);
+        await axios.patch(`/api/camera-configs/${configId}/status`, { status });
         // 更新本地状态
         const config = this.cameraConfigs.find(c => c.id === configId);
         if (config) {
-          config.enable = config.enable === 1 ? 0 : 1;
+          config.status = status;
         }
       } catch (error: any) {
-        this.error = error.response?.data?.detail || '切换摄像头配置状态失败';
+        this.error = error.response?.data?.detail || '更新摄像头配置状态失败';
         throw error;
       } finally {
         this.loading = false;

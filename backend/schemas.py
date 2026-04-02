@@ -84,13 +84,13 @@ class CameraConfigBase(BaseModel):
     pen_id: int
     start_time: str = '09:00'
     end_time: str = '19:00'
+    status: int = 1
 
 class CameraConfigCreate(CameraConfigBase):
     pass
 
 class CameraConfig(CameraConfigBase):
     id: int
-    enable: int
     created_at: datetime
     
     class Config:
