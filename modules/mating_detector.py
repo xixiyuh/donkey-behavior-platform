@@ -366,9 +366,11 @@ class MatingDetector:
         if event['screenshots']:
             screenshot = event['screenshots'][0]
             self._log(f"Original screenshot path: {screenshot}")
-            # 将截图从trash目录移动到正式目录
-            screenshot = self._move_screenshot_to_official_directory(screenshot)
-            self._log(f"Moved screenshot path: {screenshot}")
+        else:
+            self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+            # 删除所有截图
+            # self._cleanup_screenshots(event['screenshots'])
+            return
 
         # 检查截图尺寸
         if screenshot:
@@ -407,11 +409,6 @@ class MatingDetector:
                 # 删除所有截图
                 # self._cleanup_screenshots(event['screenshots'])
                 return
-        else:
-            self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
-            # 删除所有截图
-            # self._cleanup_screenshots(event['screenshots'])
-            return
 
         # 使用contract detector进行二次检测
         if screenshot:
@@ -432,6 +429,10 @@ class MatingDetector:
                 # 删除所有截图
                 # self._cleanup_screenshots(event['screenshots'])
                 return
+
+        # 所有条件都通过，将截图从trash目录移动到正式目录
+        screenshot = self._move_screenshot_to_official_directory(screenshot)
+        self._log(f"Moved screenshot path: {screenshot}")
         
         # 记录到数据库
         try:
