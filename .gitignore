@@ -1,5 +1,6 @@
 
 donkey_env/
+static/
 __pycache__/
 *.pyc
 *.bak

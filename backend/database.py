@@ -65,6 +65,7 @@ def init_db():
         duration INTEGER NOT NULL,
         avg_confidence REAL NOT NULL,
         max_confidence REAL NOT NULL,
+        movement REAL NOT NULL,
         screenshot TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (pen_id) REFERENCES pens (id),
