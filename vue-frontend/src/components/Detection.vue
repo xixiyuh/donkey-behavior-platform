@@ -6,7 +6,6 @@
       <small>
         <strong>支持输入源：</strong> 本地视频 | 本地图片<br>
         <strong>AI模型：</strong> YOLOv8 + 对比学习交配行为识别<br>
-        <strong>硬件加速：</strong> RK3588 NPU (RKNN Lite2)
       </small>
     </div>
 
