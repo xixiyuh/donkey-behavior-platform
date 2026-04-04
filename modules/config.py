@@ -14,6 +14,7 @@ MATING_EVENT_MIN_DURATION = 6  # 最小mating事件持续时间（秒）
 MATING_CONF_THRES = 0.4  # mating检测的置信度阈值
 MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
 MATING_MAX_CONF_THRES = 0.9  # mating事件最高置信度阈值，只有超过此阈值的事件才会被记录
+MATING_HIGH_CONF_SKIP_MOVEMENT = 0.9  # mating事件最高置信度阈值，只有超过此阈值的事件才会被记录
 MATING_COOLDOWN_PERIOD = 2  # mating事件冷却期（秒），连续多帧没有检测到时才结束事件
 MATING_MIN_MOVEMENT = 50  # 最小移动距离阈值（像素），只有超过此阈值的事件才会被记录
 
@@ -27,6 +28,7 @@ MIN_HEIGHT = 80  # 截图最小高度
 # ------- 日志配置 -------
 LOG_DIR = str(BASE_DIR / "logs")  # 日志目录
 MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")  # mating事件日志文件
+STANDING_LOG_FILE = str(BASE_DIR / "logs" / "standing_events.log")  # standing事件日志文件
 
 # ✅ Windows 先跑 .pt
 PT_MODEL_PATH = str(BASE_DIR / "models" / r"E:\donkey\萤石云\realtime-detector\models\0710-best-YOLO.pt")  # ←改成你的真实路径也行
