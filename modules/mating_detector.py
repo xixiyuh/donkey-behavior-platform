@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MATING_MAX_CONF_THRES, MIN_WIDTH, MIN_HEIGHT, MATING_COOLDOWN_PERIOD, MATING_MIN_MOVEMENT
+from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MATING_MAX_CONF_THRES, MIN_WIDTH, MIN_HEIGHT, MATING_COOLDOWN_PERIOD, MATING_MIN_MOVEMENT, MATING_HIGH_CONF_SKIP_MOVEMENT
 
 # 尝试导入contract detector，如果不存在则使用默认实现
 try:
@@ -22,14 +22,15 @@ except ImportError:
 
 # 尝试导入日志配置，如果不存在则使用默认值
 try:
-    from .config import MATING_LOG_FILE, LOG_DIR
+    from .config import MATING_LOG_FILE, LOG_DIR, STANDING_LOG_FILE
 except ImportError:
     import os
     from pathlib import Path
     BASE_DIR = Path(__file__).resolve().parents[1]
     LOG_DIR = str(BASE_DIR / "logs")
     MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")
-    print(f"Warning: LOG_DIR and MATING_LOG_FILE not found in config.py, using default values: LOG_DIR={LOG_DIR}, MATING_LOG_FILE={MATING_LOG_FILE}")
+    STANDING_LOG_FILE = str(BASE_DIR / "logs" / "standing_events.log")
+    print(f"Warning: LOG_DIR and MATING_LOG_FILE not found in config.py, using default values: LOG_DIR={LOG_DIR}, MATING_LOG_FILE={MATING_LOG_FILE}, STANDING_LOG_FILE={STANDING_LOG_FILE}")
 
 class MatingDetector:
     def __init__(self):
@@ -43,6 +44,7 @@ class MatingDetector:
         os.makedirs(LOG_DIR, exist_ok=True)
         # 确保日志文件存在
         open(MATING_LOG_FILE, 'a').close()
+        open(STANDING_LOG_FILE, 'a').close()
     
     def _log(self, message):
         """
@@ -64,7 +66,7 @@ class MatingDetector:
         每天清理一次日志文件
         """
         try:
-            # 检查日志文件是否存在
+            # 清理 mating 日志文件
             if os.path.exists(MATING_LOG_FILE):
                 # 获取文件创建时间
                 file_stat = os.stat(MATING_LOG_FILE)
@@ -121,7 +123,7 @@ class MatingDetector:
         
         # Check if file exists
         if not os.path.exists(trash_path):
-            self._log(f"Screenshot not found in trash: {trash_path}")
+            self._log(f"_move_screenshot_to_official_directory:Screenshot not found in trash: {trash_path}")
             return None
         
         # Generate path in official directory
@@ -131,13 +133,13 @@ class MatingDetector:
         try:
             os.rename(trash_path, official_path)
             self._log(f"Moved screenshot to official directory: {trash_path} -> {official_path}")
+            # Return new relative path (pointing to official directory)
+            new_relative_path = f"/static/mating_screenshots/{filename}"
+            return new_relative_path
         except Exception as e:
             self._log(f"Error moving screenshot: {e}")
             return None
-        
-        # Generate new relative path
-        new_relative_path = f"/static/mating_screenshots/{filename}"
-        return new_relative_path
+
                                                                                               
     def detect_mating(self, frame, detections, camera_id=None, pen_id=None, barn_id=None):
         """
@@ -157,6 +159,9 @@ class MatingDetector:
             pen_id = -1
         if barn_id is None:
             barn_id = -1
+        
+        # 获取当前时间
+        current_time = datetime.now()
         
         # 检查超时事件
         self.check_timeout_events()
@@ -276,6 +281,8 @@ class MatingDetector:
         
         # 生成相对于静态文件目录的路径，用于事件记录（指向trash目录）
         relative_path = f"/static/mating_screenshots_trash/{filename}"
+        # 生成绝对路径，用于日志记录
+        absolute_path = os.path.abspath(filepath)
         
         # 并删除旧的截图文件
         event = self.current_mating_events[event_key]
@@ -303,6 +310,9 @@ class MatingDetector:
             event['screenshots'][index] = relative_path
         else:
             event['screenshots'].append(relative_path)
+        
+        # 记录绝对路径到日志
+        #self._log(f"Saved screenshot: {absolute_path}")
     
     def end_mating_event(self, event_key):
         """
@@ -326,64 +336,26 @@ class MatingDetector:
             self._cleanup_screenshots(event['screenshots'])
             return
         
-        # 计算平均置信度和最大置信度
-        confidences = [d['confidence'] for d in event['detections']]
-        avg_confidence = np.mean(confidences) if confidences else 0
-        max_confidence = max(confidences) if confidences else 0
-        # 检查平均置信度是否达到阈值
-        if avg_confidence < MATING_AVG_CONF_THRES:
-           self._log(f"Mating event skipped (average confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={event['screenshots']}")
-           # 删除所有截图
-           # self._cleanup_screenshots(event['screenshots'])
-           return
-
-        # 检查最高置信度是否达到阈值
-        if max_confidence < MATING_MAX_CONF_THRES:
-            self._log(f"Mating event skipped (max confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={event['screenshots']}")
-            # 删除所有截图
-            # self._cleanup_screenshots(event['screenshots'])
-            return
-        
-        # 计算移动距离
-        total_movement = 0
-        if 'centers' in event and len(event['centers']) >= 2:
-            for i in range(1, len(event['centers'])):
-                x1, y1 = event['centers'][i-1]
-                x2, y2 = event['centers'][i]
-                distance = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-                total_movement += distance
-        self._log(f"Total movement: {total_movement:.2f} pixels, threshold: {MATING_MIN_MOVEMENT} pixels")
-        
-        # 检查移动距离是否达到阈值
-        if total_movement < MATING_MIN_MOVEMENT:
-            self._log(f"Mating event skipped (movement too small): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px")
-            # 删除所有截图
-            # self._cleanup_screenshots(event['screenshots'])
-            return
-        
         # 选择置信度最高的截图（只保存了1张，直接使用）
         screenshot = None
         if event['screenshots']:
             screenshot = event['screenshots'][0]
-            self._log(f"Original screenshot path: {screenshot}")
+            # 转换相对路径为绝对路径用于日志
+            absolute_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/")))
+            #self._log(f"Original screenshot path: {absolute_path}")
         else:
-            self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+            # self._log(f"Mating event skipped (screenshot not found): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
             # 删除所有截图
-            # self._cleanup_screenshots(event['screenshots'])
+            self._cleanup_screenshots(event['screenshots'])
             return
 
         # 检查截图尺寸
         if screenshot:
             # 转换相对路径为绝对路径
             screenshot_path = os.path.join(os.path.dirname(__file__), "..", screenshot.lstrip("/"))
-            self._log(f"Full screenshot path: {screenshot_path}")
+            #self._log(f"Full screenshot path: {screenshot_path}")
             # 检查文件是否存在
             if not os.path.exists(screenshot_path):
-                self._log(
-                    f"Mating event skipped (screenshot path not exists): "
-                    f"camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, "
-                    f"path={screenshot_path}, src={event['screenshots']}"
-                )
                 return
 
             # 读取图片并检查尺寸
@@ -409,6 +381,62 @@ class MatingDetector:
                 # 删除所有截图
                 # self._cleanup_screenshots(event['screenshots'])
                 return
+        
+        # 计算平均置信度和最大置信度
+        confidences = [d['confidence'] for d in event['detections']]
+        avg_confidence = np.mean(confidences) if confidences else 0
+        max_confidence = max(confidences) if confidences else 0
+        # 转换相对路径为绝对路径用于日志
+        absolute_screenshots = []
+        for s in event['screenshots']:
+            if s:
+                absolute_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", s.lstrip("/")))
+                absolute_screenshots.append(absolute_path)
+            else:
+                absolute_screenshots.append(s)
+
+        # 检查平均置信度是否达到阈值
+        if avg_confidence < MATING_AVG_CONF_THRES:
+            self._log(f"Mating event skipped (average confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
+            # 删除所有截图
+            # self._cleanup_screenshots(event['screenshots'])
+            return
+
+        # 检查最高置信度是否达到阈值
+        if max_confidence < MATING_MAX_CONF_THRES:
+            self._log(f"Mating event skipped (max confidence too low): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
+            # 删除所有截图
+            # self._cleanup_screenshots(event['screenshots'])
+            return
+        
+        # 计算移动距离
+        total_movement = 0
+        if 'centers' in event and len(event['centers']) >= 2:
+            for i in range(1, len(event['centers'])):
+                x1, y1 = event['centers'][i-1]
+                x2, y2 = event['centers'][i]
+                distance = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+                total_movement += distance
+        self._log(f"Total movement: {total_movement:.2f} pixels, threshold: {MATING_MIN_MOVEMENT} pixels")
+        
+        # 检查移动距离是否达到阈值，只有当平均置信度低于高置信度阈值时才检查
+        if avg_confidence < MATING_HIGH_CONF_SKIP_MOVEMENT and total_movement < MATING_MIN_MOVEMENT:
+            self._log(f"Mating event skipped (movement too small): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px,avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
+            # 删除所有截图
+            # self._cleanup_screenshots(event['screenshots'])
+            return
+        # 当平均置信度高于高置信度阈值时，跳过移动距离检查
+        elif avg_confidence >= MATING_HIGH_CONF_SKIP_MOVEMENT:
+            self._log(f"Skipping movement check due to high confidence: avg_conf={avg_confidence:.2f} >= threshold={MATING_HIGH_CONF_SKIP_MOVEMENT}")
+
+        # 转换相对路径为绝对路径用于日志
+        absolute_screenshots = []
+        for s in event['screenshots']:
+            if s:
+                absolute_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", s.lstrip("/")))
+                absolute_screenshots.append(absolute_path)
+            else:
+                absolute_screenshots.append(s)
 
         # 使用contract detector进行二次检测
         if screenshot:
@@ -418,21 +446,27 @@ class MatingDetector:
             try:
                 contract_detector = get_contract_detector()
                 is_mating = contract_detector.predict(screenshot_path)
-                self._log(f"Contract detection result: {is_mating}")
+                self._log(f"Contract detection result: {is_mating},src={absolute_screenshots},camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px,avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f}")
                 if not is_mating:
-                    self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+                    self._log(f"Mating event skipped (contract detector returned non-mating): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px,avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
                     # 删除所有截图
                     #self._cleanup_screenshots(event['screenshots'])
                     return
             except Exception as e:
-                self._log(f"Error during contract detection: {e}")
+                self._log(f"Error during contract detection: {e},src={absolute_screenshots},camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px,avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f}")
                 # 删除所有截图
                 # self._cleanup_screenshots(event['screenshots'])
                 return
 
         # 所有条件都通过，将截图从trash目录移动到正式目录
+        self._log(f"all is need: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
         screenshot = self._move_screenshot_to_official_directory(screenshot)
-        self._log(f"Moved screenshot path: {screenshot}")
+        self._log(f"Moved screenshot path: {absolute_screenshots}")
+        
+        # 检查截图是否移动成功
+        if not screenshot:
+            self._log(f"Mating event skipped (failed to move screenshot): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}")
+            return
         
         # 记录到数据库
         try:
