@@ -1,6 +1,6 @@
 <template>
   <nav class="navbar">
-    <h1>🚀 RK3588 实时检测系统</h1>
+    <h1>🚀 东阿阿胶养殖场-实时检测系统</h1>
     <div class="nav-links">
       <router-link to="/detection" class="nav-link">实时检测</router-link>
       <router-link to="/barns" class="nav-link">养殖舍管理</router-link>
