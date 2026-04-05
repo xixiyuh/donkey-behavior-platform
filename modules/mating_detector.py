@@ -132,7 +132,7 @@ class MatingDetector:
         # Move file
         try:
             os.rename(trash_path, official_path)
-            self._log(f"Moved screenshot to official directory: {trash_path} -> {official_path}")
+            self._log(f"Moved screenshot to official directory:{official_path}")
             # Return new relative path (pointing to official directory)
             new_relative_path = f"/static/mating_screenshots/{filename}"
             return new_relative_path
@@ -461,7 +461,6 @@ class MatingDetector:
         # 所有条件都通过，将截图从trash目录移动到正式目录
         self._log(f"all is need: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
         screenshot = self._move_screenshot_to_official_directory(screenshot)
-        self._log(f"Moved screenshot path: {absolute_screenshots}")
         
         # 检查截图是否移动成功
         if not screenshot:
