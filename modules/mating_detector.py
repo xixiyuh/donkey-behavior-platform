@@ -131,8 +131,8 @@ class MatingDetector:
         
         # Move file
         try:
-            os.rename(trash_path, official_path)
-            self._log(f"Moved screenshot to official directory: {trash_path} -> {official_path}")
+            os.rename( official_path)
+            self._log(f"Moved screenshot to official directory: {official_path}")
             # Return new relative path (pointing to official directory)
             new_relative_path = f"/static/mating_screenshots/{filename}"
             return new_relative_path
@@ -461,7 +461,7 @@ class MatingDetector:
         # 所有条件都通过，将截图从trash目录移动到正式目录
         self._log(f"all is need: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
         screenshot = self._move_screenshot_to_official_directory(screenshot)
-        self._log(f"Moved screenshot path: {screenshot}")
+        
         
         # 检查截图是否移动成功
         if not screenshot:
@@ -472,16 +472,27 @@ class MatingDetector:
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # 为本地视频测试使用有效的pen_id和barn_id
+            pen_id = event['pen_id']
+            barn_id = event['barn_id']
+            
+            # 如果是本地视频测试，使用默认的pen_id和barn_id
+            if event['camera_id'] == 'local-file' and (pen_id == -1 or barn_id == -1):
+                pen_id = 1  # 使用默认栏ID
+                barn_id = 1  # 使用默认养殖舍ID
+                self._log(f"Using default pen_id={pen_id}, barn_id={barn_id} for local video test")
+            
             cursor.execute('''
             INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
-                                       avg_confidence, max_confidence, movement, screenshot)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (event['camera_id'], event['pen_id'], event['barn_id'], 
+                               avg_confidence, max_confidence, movement, screenshot)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (event['camera_id'], pen_id, barn_id, 
                   event['start_time'], end_time, duration, avg_confidence, max_confidence, 
                   total_movement, screenshot))
             conn.commit()
             conn.close()
-            self._log(f"Mating event recorded: camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, duration={duration}s, avg_conf={avg_confidence:.2f}, movement={total_movement:.2f}px")
+            self._log(f"Mating event recorded: camera={event['camera_id']}, pen={pen_id}, barn={barn_id}, duration={duration}s, avg_conf={avg_confidence:.2f}, movement={total_movement:.2f}px")
         except Exception as e:
             self._log(f"Error recording event: {e}")
     

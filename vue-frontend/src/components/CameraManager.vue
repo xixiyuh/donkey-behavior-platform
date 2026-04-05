@@ -94,10 +94,9 @@
               <input
                 v-else
                 type="text"
-                ref="flvInputRef"
+                :ref="el => el && (flvInputRef = el as HTMLInputElement)"
                 v-model="editingFlvUrl"
                 style="width: 100%; padding: 5px; border-radius: 5px; border: 1px solid #334; background: #172045; color: #e7e9ee;"
-                @mounted="focusInput"
               />
             </td>
             <td>
@@ -135,12 +134,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useBarnStore } from '../stores/barn';
-import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
 import type { Pen, Camera } from '../types';
 
 const barnStore = useBarnStore();
-const penStore = usePenStore();
 const cameraStore = useCameraStore();
 
 const currentPage = ref(1);

@@ -62,7 +62,17 @@ def update_camera(camera_id: int, camera: CameraUpdate):
     existing_camera = Camera.get_by_id(camera_id)
     if not existing_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-    Camera.update(camera_id, camera.camera_id, camera.pen_id, camera.barn_id, camera.flv_url)
+    
+    # 使用现有值作为默认值，只更新提供的字段
+    update_data = camera.model_dump(exclude_unset=True)
+    Camera.update(
+        camera_id,
+        update_data.get("camera_id", existing_camera["camera_id"]),
+        update_data.get("pen_id", existing_camera["pen_id"]),
+        update_data.get("barn_id", existing_camera["barn_id"]),
+        update_data.get("flv_url", existing_camera["flv_url"])
+    )
+    
     updated_camera = Camera.get_by_id(camera_id)
     return {
         "id": updated_camera["id"],

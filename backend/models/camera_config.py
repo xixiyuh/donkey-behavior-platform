@@ -1,5 +1,4 @@
 from ..database import get_db_connection
-import sqlite3
 from datetime import datetime
 
 class CameraConfig:
@@ -9,7 +8,7 @@ class CameraConfig:
         cursor = conn.cursor()
         cursor.execute('''
         INSERT INTO camera_configs (camera_id, flv_url, barn_id, pen_id, start_time, end_time, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (camera_id, flv_url, barn_id, pen_id, start_time, end_time, status))
         conn.commit()
         config_id = cursor.lastrowid
@@ -23,11 +22,11 @@ class CameraConfig:
         
         # 获取总记录数
         cursor.execute('SELECT COUNT(*) FROM camera_configs')
-        total = cursor.fetchone()[0]
+        total = cursor.fetchone()['COUNT(*)']
         
         # 获取分页数据
         offset = (page - 1) * page_size
-        cursor.execute('SELECT * FROM camera_configs LIMIT ? OFFSET ?', (page_size, offset))
+        cursor.execute('SELECT * FROM camera_configs LIMIT %s OFFSET %s', (page_size, offset))
         configs = cursor.fetchall()
         conn.close()
         
@@ -81,7 +80,7 @@ class CameraConfig:
         """
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('UPDATE camera_configs SET status = ? WHERE id = ?', (status, id))
+        cursor.execute('UPDATE camera_configs SET status = %s WHERE id = %s', (status, id))
         conn.commit()
         conn.close()
     
@@ -89,7 +88,7 @@ class CameraConfig:
     def get_by_id(id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM camera_configs WHERE id = ?', (id,))
+        cursor.execute('SELECT * FROM camera_configs WHERE id = %s', (id,))
         config = cursor.fetchone()
         conn.close()
         return config
@@ -98,6 +97,6 @@ class CameraConfig:
     def delete(id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM camera_configs WHERE id = ?', (id,))
+        cursor.execute('DELETE FROM camera_configs WHERE id = %s', (id,))
         conn.commit()
         conn.close()

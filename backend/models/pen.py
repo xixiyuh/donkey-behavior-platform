@@ -1,12 +1,11 @@
 from ..database import get_db_connection
-import sqlite3
 
 class Pen:
     @staticmethod
     def create(pen_number, barn_id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO pens (pen_number, barn_id) VALUES (?, ?)', (pen_number, barn_id))
+        cursor.execute('INSERT INTO pens (pen_number, barn_id) VALUES (%s, %s)', (pen_number, barn_id))
         conn.commit()
         pen_id = cursor.lastrowid
         conn.close()
@@ -19,11 +18,11 @@ class Pen:
         
         # 获取总记录数
         cursor.execute('SELECT COUNT(*) FROM pens')
-        total = cursor.fetchone()[0]
+        total = cursor.fetchone()['COUNT(*)']
         
         # 获取分页数据
         offset = (page - 1) * page_size
-        cursor.execute('SELECT * FROM pens ORDER BY barn_id, pen_number LIMIT ? OFFSET ?', (page_size, offset))
+        cursor.execute('SELECT * FROM pens ORDER BY barn_id, pen_number LIMIT %s OFFSET %s', (page_size, offset))
         pens = cursor.fetchall()
         conn.close()
         
@@ -38,7 +37,7 @@ class Pen:
     def get_by_id(pen_id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM pens WHERE id = ?', (pen_id,))
+        cursor.execute('SELECT * FROM pens WHERE id = %s', (pen_id,))
         pen = cursor.fetchone()
         conn.close()
         return pen
@@ -47,7 +46,7 @@ class Pen:
     def get_by_barn(barn_id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM pens WHERE barn_id = ? ORDER BY pen_number', (barn_id,))
+        cursor.execute('SELECT * FROM pens WHERE barn_id = %s ORDER BY pen_number', (barn_id,))
         pens = cursor.fetchall()
         conn.close()
         return pens
@@ -56,7 +55,7 @@ class Pen:
     def update(pen_id, pen_number, barn_id):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('UPDATE pens SET pen_number = ?, barn_id = ? WHERE id = ?', (pen_number, barn_id, pen_id))
+        cursor.execute('UPDATE pens SET pen_number = %s, barn_id = %s WHERE id = %s', (pen_number, barn_id, pen_id))
         conn.commit()
         conn.close()
     
@@ -65,11 +64,8 @@ class Pen:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 先删除该栏下的所有摄像头
-        cursor.execute('DELETE FROM cameras WHERE pen_id = ?', (pen_id,))
-        
-        # 然后删除栏本身
-        cursor.execute('DELETE FROM pens WHERE id = ?', (pen_id,))
+        # 由于设置了外键级联删除，不需要手动删除关联数据
+        cursor.execute('DELETE FROM pens WHERE id = %s', (pen_id,))
         
         conn.commit()
         conn.close()
