@@ -81,7 +81,7 @@ def init_db():
         flv_url TEXT NOT NULL,
         barn_id INTEGER NOT NULL,
         pen_id INTEGER NOT NULL,
-        enable INTEGER DEFAULT 1,
+        status INTEGER DEFAULT 1,
         start_time TEXT DEFAULT '09:00',
         end_time TEXT DEFAULT '19:00',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -89,6 +89,14 @@ def init_db():
         FOREIGN KEY (pen_id) REFERENCES pens (id)
     )
     ''')
+
+    # 兼容旧版本数据库：如果表中仍然使用 enable 字段，则迁移到 status 字段
+    cursor.execute('PRAGMA table_info(camera_configs)')
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'status' not in columns:
+        cursor.execute('ALTER TABLE camera_configs ADD COLUMN status INTEGER DEFAULT 1')
+        if 'enable' in columns:
+            cursor.execute('UPDATE camera_configs SET status = enable WHERE enable IN (0, 1)')
     
     conn.commit()
     conn.close()
