@@ -1,23 +1,34 @@
 # Web框架和服务器
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-dotenv
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
 
 # 图像处理和计算机视觉
-opencv-python-headless
-numpy
-Pillow
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
 
 # 模型和推理
-ultralytics
+ultralytics>=8.1.0  # YOLO v8
+
+# 视频处理
+python-mpv>=1.0.0  # mpv 0.35+ 视频流获取和处理
 
 # WebSocket和文件处理
-websockets
-python-multipart
-aiofiles
+websockets>=12.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
 
-# 其他
-requests
-apscheduler
+# 数据库
+# SQLite 3.35+ 是 Python 标准库的一部分，无需额外安装
+
+# 时间和调度
+apscheduler>=3.10.0
+
+# 网络请求
+requests>=2.31.0
+
+# 系统工具
+psutil>=5.9.0  # 用于监控系统资源使用情况
