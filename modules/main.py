@@ -182,7 +182,8 @@ class CameraDetectionManager:
                 stream.barn_id = camera_config['barn_id']
                 
                 # 启动处理线程
-                t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
+
                 
                 # 持续运行，直到停止事件被设置
                 while not stop_event.is_set():
@@ -207,7 +208,7 @@ class CameraDetectionManager:
                     if reconnect():
                         print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
                         # 重新启动处理线程
-                        t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                        t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
                         # 继续运行
                         while not stop_event.is_set():
                             time.sleep(1)
@@ -235,7 +236,7 @@ class CameraDetectionManager:
                         if reconnect():
                             print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
                             # 重新启动处理线程
-                            t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event)
+                            t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
                             # 继续运行
                             while not stop_event.is_set():
                                 time.sleep(1)
@@ -400,8 +401,32 @@ async def stop_camera_detection(config_id: int):
 
 
 
-def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event):
+def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event, camera_config=None):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
+
+    def is_within_time_range():
+        """判断当前时间是否在摄像头配置的时间范围内"""
+        if not camera_config:
+            return True
+        current_time = datetime.now().time()
+        start_time = datetime.strptime(camera_config.get('start_time', '09:00'), '%H:%M').time()
+        end_time = datetime.strptime(camera_config.get('end_time', '19:00'), '%H:%M').time()
+        return start_time <= current_time <= end_time
+
+    def reconnect():
+        """尝试重新连接视频流"""
+        nonlocal stream
+        try:
+            print(f"{get_timestamp()} [READER] Attempting to reconnect to camera {camera_config.get('id', 'unknown')}")
+            stream = open_source('flv', camera_config['flv_url'])
+            # 设置摄像头、栏和舍的ID
+            stream.camera_id = camera_config['camera_id']
+            stream.pen_id = camera_config['pen_id']
+            stream.barn_id = camera_config['barn_id']
+            return True
+        except Exception as e:
+            print(f"{get_timestamp()} [READER] Reconnection failed: {e}")
+            return False
 
     def reader():
         cnt = 0
@@ -423,9 +448,24 @@ def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_even
                 if not ok or frame is None:
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
-                        print(f"{get_timestamp()} [READER] Stream ended, setting stop event", flush=True)
-                        stop_event.set()
-                        break
+                        print(f"{get_timestamp()} [READER] Stream ended, checking reconnection conditions", flush=True)
+                        # 检查是否处于工作时间且摄像头状态不是禁用
+                        if camera_config and is_within_time_range() and camera_config.get('status', 'enabled') == 'enabled':
+                            print(f"{get_timestamp()} [READER] Attempting to reconnect", flush=True)
+                            # 尝试重新连接
+                            if reconnect():
+                                print(f"{get_timestamp()} [READER] Reconnection successful, continuing", flush=True)
+                                consecutive_failures = 0
+                                time.sleep(0.1)  # 短暂等待，确保流稳定
+                                continue
+                            else:
+                                print(f"{get_timestamp()} [READER] Reconnection failed, setting stop event", flush=True)
+                                stop_event.set()
+                                break
+                        else:
+                            print(f"{get_timestamp()} [READER] Not in working time or camera disabled, setting stop event", flush=True)
+                            stop_event.set()
+                            break
                     time.sleep(0.02)
                     continue
 
@@ -552,7 +592,8 @@ async def ws_endpoint(
         print(f"{get_timestamp()} [WS] Stream configured: camera_id={stream.camera_id if hasattr(stream, 'camera_id') else None}, pen_id={stream.pen_id if hasattr(stream, 'pen_id') else None}, barn_id={stream.barn_id if hasattr(stream, 'barn_id') else None}", flush=True)
 
         # 启动处理线程
-        threads = start_pipeline(stream, det, result_queue, stop_event)
+        # 对于WebSocket连接，没有camera_config，所以传递None
+        threads = start_pipeline(stream, det, result_queue, stop_event, None)
 
         # 异步处理帧数据
         while True:
