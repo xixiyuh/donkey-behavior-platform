@@ -580,7 +580,10 @@ async def ws_endpoint(
 
         # 异步打开视频源，避免阻塞事件循环
         loop = asyncio.get_event_loop()
-        stream = await loop.run_in_executor(None, lambda: open_source(kind, value or ""))
+        stream = await loop.run_in_executor(
+            None, 
+            lambda: open_source(kind, value or "")
+        )
         
         # 设置摄像头、栏和舍的ID
         if camera_id:
@@ -606,7 +609,7 @@ async def ws_endpoint(
                     continue
 
                 # 异步发送帧数据
-                await ws_manager.send_frame(ws, frame)
+                await ws_manager.send_frame(ws, frame) 
 
             except asyncio.CancelledError:
                 break

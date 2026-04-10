@@ -16,7 +16,7 @@
         <select
           id="barn"
           v-model="selectedBarn"
-          @change="loadPens"
+          @change="loadPens"   <!-- 选完牛舍，自动加载该牛舍下的栏位 -->
         >
           <option value="">请选择养殖舍</option>
           <option
@@ -150,7 +150,7 @@ const { uploadFile, deleteFile, checkHealth: checkSystemHealth } = useApi();
 const barns = ref<Barn[]>([]);
 const pens = ref<Pen[]>([]);
 const cameras = ref<Camera[]>([]);
-const selectedBarn = ref<string>('');
+const selectedBarn = ref<string>('');//创建一个【响应式字符串变量】用来存【当前选中的牛舍ID】一开始是空
 const selectedPen = ref<string>('');
 const selectedCamera = ref<string>('');
 const kind = ref<string>('file');
@@ -414,7 +414,7 @@ const checkHealth = async () => {
 };
 
 // 监听连接状态变化，当连接状态改变时重置加载状态
-watch(isConnected, (newValue) => {
+watch(isConnected, () => {
   // 无论是连接成功还是关闭，都关闭加载状态
   isLoading.value = false;
 });

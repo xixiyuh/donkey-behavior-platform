@@ -25,6 +25,7 @@ class WSManager:
     async def send_frame(self, ws, frame):
         now = time.time()
         last = self._last_times.get(ws, 0)
+        # 如果没到发送间隔，就等一下，避免发送过快
         if self.interval > 0 and now - last < self.interval:
             await asyncio.sleep(self.interval - (now - last))
         self._last_times[ws] = time.time()
@@ -35,6 +36,7 @@ class WSManager:
             ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, C.JPEG_QUALITY])
             if not ok:
                 raise RuntimeError("Failed to encode frame to JPEG")
+            # 转成 Base64 字符串（前端可以直接放在 img src 里显示）
             return base64.b64encode(buffer).decode('utf-8')
 
         frame_data = await loop.run_in_executor(None, encode_frame)

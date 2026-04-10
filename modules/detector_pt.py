@@ -13,7 +13,7 @@ class PTDetector:
     def infer_once(self, frame_bgr: np.ndarray):
         t0 = time.time()
 
-        # 娉ㄦ剰锛氳繖閲屾敼鎴?track锛屼笉鏄?predict
+        # 调用ByteTrack进行跟踪
         r = self.model.track(
             frame_bgr,
             persist=True,
