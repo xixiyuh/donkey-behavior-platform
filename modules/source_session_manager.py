@@ -1,0 +1,442 @@
+"""
+源会话管理器 - 实现同源 pipeline 共享与多订阅者架构
+
+核心理念：
+- 同一视频源（kind+value）只有一个 SourceSession
+- 一个 SourceSession 只有一套 reader + infer 线程
+- 多个 WebSocket 只作为该 session 的订阅者，接收广播结果
+- TTL 空闲释放机制：最后一个订阅者离开后，等待 TTL 再销毁
+"""
+
+import threading
+import queue
+import time
+import asyncio
+from typing import Dict, Tuple, Optional, Any, List, Set
+from datetime import datetime
+from dataclasses import dataclass, field
+from collections import defaultdict
+
+import numpy as np
+import cv2
+
+from . import config as C
+from .streams import open_source
+from .detector_pt import PTDetector
+from .logger import inf, dbg, wrn, err
+from .logger import inf, dbg, wrn, err
+
+def get_timestamp():
+    return datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+
+
+@dataclass
+class SourceKey:
+    """视频源唯一标识：(kind, value, camera_id)"""
+    kind: str
+    value: str
+    camera_id: Optional[str] = None
+    
+    def __hash__(self):
+        return hash((self.kind, self.value, self.camera_id))
+    
+    def __eq__(self, other):
+        if not isinstance(other, SourceKey):
+            return False
+        return (self.kind == other.kind and 
+                self.value == other.value and 
+                self.camera_id == other.camera_id)
+    
+    def __repr__(self):
+        cam_suffix = f"@{self.camera_id}" if self.camera_id else ""
+        return f"SourceKey({self.kind}:{self.value[:30]}...{cam_suffix})"
+
+
+class SourceSession:
+    """
+    单个视频源的会话
+    
+    职责：
+    - 持有 stream 和 detector
+    - 运行 reader + infer 线程
+    - 维护 latest_frame 和 latest_result
+    - 向多个订阅者广播结果
+    - 管理订阅者增删和引用计数
+    """
+    
+    def __init__(self, source_key: SourceKey, stream, detector: PTDetector):
+        self.source_key = source_key
+        self.stream = stream
+        self.detector = detector
+        
+        # 订阅者管理
+        self.subscribers: Set[Any] = set()  # 存储 WebSocket 连接
+        self.ref_count = 0
+        self.subscribers_lock = threading.RLock()
+        
+        # 帧和结果
+        self.latest_frame = None
+        self.latest_result = None
+        self.frame_lock = threading.RLock()
+        self.result_lock = threading.RLock()
+        
+        # 线程控制
+        self.stop_event = threading.Event()
+        self.reader_thread: Optional[threading.Thread] = None
+        self.infer_thread: Optional[threading.Thread] = None
+        
+        # 空闲超时
+        self.last_active_time = time.time()
+        self.idle_timeout = 60  # 秒
+        
+        # 元数据和统计
+        self.created_at = datetime.now()
+        self.metadata = {
+            'kind': source_key.kind,
+            'value': source_key.value,
+            'camera_id': source_key.camera_id,
+        }
+        
+        # 性能统计计数器
+        self.start_count = 0  # pipeline启动次数
+        self.infer_count = 0  # 推理次数
+        self.frame_no = 0    # 帧编号
+        
+        inf(f"[SESSION] Created source_key={source_key} session_id={id(self)} stream_id={id(stream)}")
+    
+    def add_subscriber(self, ws) -> None:
+        """添加订阅者"""
+        with self.subscribers_lock:
+            if ws not in self.subscribers:
+                self.subscribers.add(ws)
+                self.ref_count += 1
+                self.last_active_time = time.time()
+                print(f"{get_timestamp()} [SourceSession] {self.source_key} add subscriber, ref_count={self.ref_count}", 
+                      flush=True)
+    
+    def remove_subscriber(self, ws) -> int:
+        """移除订阅者，返回当前 ref_count"""
+        with self.subscribers_lock:
+            if ws in self.subscribers:
+                self.subscribers.discard(ws)
+                self.ref_count -= 1
+                self.last_active_time = time.time()
+                print(f"{get_timestamp()} [SourceSession] {self.source_key} remove subscriber, ref_count={self.ref_count}", 
+                      flush=True)
+            return self.ref_count
+    
+    def is_idle(self) -> bool:
+        """检查是否空闲（无订阅者且超时）"""
+        with self.subscribers_lock:
+            if self.ref_count > 0:
+                return False
+        return (time.time() - self.last_active_time) > self.idle_timeout
+    
+    def start(self) -> None:
+        """启动 reader 和 infer 线程"""
+        if self.reader_thread is None:
+            self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
+            self.reader_thread.start()
+        if self.infer_thread is None:
+            self.infer_thread = threading.Thread(target=self._infer_loop, daemon=True)
+            self.infer_thread.start()
+        
+        # 增加启动计数
+        self.start_count += 1
+        inf(f"[PIPELINE-START] source_key={self.source_key} start_count={self.start_count} reader_thread={self.reader_thread.name if self.reader_thread else None} infer_thread={self.infer_thread.name if self.infer_thread else None}")
+    
+    def stop(self) -> None:
+        """停止 session"""
+        inf(f"[SourceSession] {self.source_key} stopping...")
+        
+        try:
+            # 通知线程停止
+            self.stop_event.set()
+            
+            # 等待线程退出（短超时，因为线程是daemon）
+            if self.reader_thread and self.reader_thread.is_alive():
+                self.reader_thread.join(timeout=1.0)
+            if self.infer_thread and self.infer_thread.is_alive():
+                self.infer_thread.join(timeout=1.0)
+        except Exception as e:
+            err(f"[SourceSession] Error stopping threads: {e}")
+        
+        # 关闭流
+        try:
+            if hasattr(self.stream, 'release'):
+                self.stream.release()
+        except Exception as e:
+            err(f"[SourceSession] Error releasing stream: {e}")
+        
+        inf(f"[SourceSession] {self.source_key} stopped")
+    
+    def _reader_loop(self) -> None:
+        """读取线程 - 持续读取流的最新帧"""
+        print(f"{get_timestamp()} [Reader] {self.source_key} started", flush=True)
+        consecutive_failures = 0
+        max_consecutive_failures = 10
+        
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    ok, frame = self.stream.read()
+                    
+                    if ok and frame is not None:
+                        # 保存最新帧
+                        with self.frame_lock:
+                            self.latest_frame = frame.copy()
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            print(f"{get_timestamp()} [Reader] {self.source_key} stream failed, stopping", 
+                                  flush=True)
+                            self.stop_event.set()
+                            break
+                        time.sleep(0.02)
+                
+                except Exception as e:
+                    print(f"{get_timestamp()} [Reader] {self.source_key} read error: {e}", flush=True)
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        self.stop_event.set()
+                        break
+                    time.sleep(0.02)
+        
+        except Exception as e:
+            print(f"{get_timestamp()} [Reader] {self.source_key} fatal error: {e}", flush=True)
+        finally:
+            print(f"{get_timestamp()} [Reader] {self.source_key} stopped", flush=True)
+    
+    def _infer_loop(self) -> None:
+        """推理线程 - 对最新帧进行推理"""
+        inf(f"[Infer] {self.source_key} started")
+        idx = 0
+        last_fps = 0.0
+        
+        try:
+            while not self.stop_event.is_set():
+                # 获取最新帧
+                with self.frame_lock:
+                    frame = self.latest_frame.copy() if self.latest_frame is not None else None
+                    self.frame_no = idx
+                
+                if frame is None:
+                    time.sleep(0.01)
+                    continue
+                
+                try:
+                    # 跳帧推理
+                    if idx % max(1, C.FRAME_INTERVAL) == 0:
+                        r, dt = self.detector.infer_once(frame)
+                        last_fps = 1.0 / dt if dt and dt > 0 else 0.0
+                        
+                        # 绘制检测框
+                        frame = self.detector.annotate(frame, r, 
+                                                       camera_id=self.metadata.get('camera_id'),
+                                                       pen_id=self.metadata.get('pen_id'),
+                                                       barn_id=self.metadata.get('barn_id'))
+                        
+                        # 增加推理计数
+                        self.infer_count += 1
+                        
+                        # 打印推理日志（每10次打印一次以减少日志量）
+                        if self.infer_count % 10 == 0:
+                            with self.subscribers_lock:
+                                inf(f"[INFER] source_key={self.source_key} infer_count={self.infer_count} frame_no={idx} subscriber_count={len(self.subscribers)}")
+                    else:
+                        # 保留上一次推理的框
+                        with self.result_lock:
+                            if self.latest_result is not None:
+                                frame = self.latest_result
+                    
+                    # 绘制 FPS
+                    self._put_fps(frame, last_fps)
+                    
+                    # 保存结果
+                    with self.result_lock:
+                        self.latest_result = frame.copy()
+                    
+                    idx += 1
+                
+                except Exception as e:
+                    err(f"[Infer] {self.source_key} inference error: {e}")
+                    time.sleep(0.01)
+        
+        except Exception as e:
+            err(f"[Infer] {self.source_key} fatal error: {e}")
+        finally:
+            inf(f"[Infer] {self.source_key} stopped")
+    
+    def _put_fps(self, frame, fps_value):
+        """绘制 FPS"""
+        try:
+            fps_text = f"FPS: {fps_value:.1f}"
+            cv2.putText(frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.7, (0, 255, 0), 2)
+        except Exception:
+            pass
+    
+    def get_latest_result(self):
+        """获取最新的检测结果帧"""
+        with self.result_lock:
+            return self.latest_result.copy() if self.latest_result is not None else None
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """获取会话统计信息"""
+        with self.subscribers_lock:
+            reader_alive = self.reader_thread is not None and self.reader_thread.is_alive()
+            infer_alive = self.infer_thread is not None and self.infer_thread.is_alive()
+            return {
+                'source_key': str(self.source_key),
+                'session_id': id(self),
+                'stream_id': id(self.stream),
+                'ref_count': self.ref_count,
+                'subscriber_count': len(self.subscribers),
+                'reader_alive': reader_alive,
+                'infer_alive': infer_alive,
+                'infer_count': self.infer_count,
+                'start_count': self.start_count,
+                'frame_no': self.frame_no,
+                'created_at': self.created_at.isoformat(),
+                'last_active_time': datetime.fromtimestamp(self.last_active_time).isoformat(),
+                'is_idle': self.is_idle(),
+                'idle_timeout': self.idle_timeout,
+            }
+
+
+class SourceSessionManager:
+    """
+    全局源会话管理器
+    
+    职责：
+    - 维护全局 source_key -> SourceSession 映射
+    - 提供 get_or_create_session() 接口
+    - 管理订阅者的添加/移除
+    - 定期清理空闲 session
+    - 异常处理和日志
+    """
+    
+    def __init__(self, idle_timeout: int = 60, cleanup_interval: int = 10):
+        self._sessions: Dict[SourceKey, SourceSession] = {}
+        self._lock = threading.RLock()
+        self.idle_timeout = idle_timeout
+        self.cleanup_interval = cleanup_interval
+        
+        # 启动清理线程
+        self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
+        self._cleanup_thread.start()
+        
+        print(f"{get_timestamp()} [SourceSessionManager] Initialized with idle_timeout={idle_timeout}s", 
+              flush=True)
+    
+    def get_or_create_session(self, source_key: SourceKey, stream, detector: PTDetector) -> SourceSession:
+        """获取或创建一个会话"""
+        with self._lock:
+            if source_key in self._sessions:
+                # 重用现有 session
+                session = self._sessions[source_key]
+                inf(f"[SESSION-REUSE] source_key={source_key} session_id={id(session)} ref_count={session.ref_count}")
+                return session
+            else:
+                # 创建新 session
+                session = SourceSession(source_key, stream, detector)
+                session.idle_timeout = self.idle_timeout
+                self._sessions[source_key] = session
+                inf(f"[SESSION-CREATE] source_key={source_key} session_id={id(session)} stream_id={id(stream)} detector_id={id(detector)}")
+                session.start()
+                inf(f"[SESSION-START] source_key={source_key} session_id={id(session)} start_count={session.start_count}")
+                return session
+    
+    def subscribe(self, source_key: SourceKey, ws) -> Optional[SourceSession]:
+        """为 WebSocket 订阅一个 source"""
+        with self._lock:
+            if source_key in self._sessions:
+                session = self._sessions[source_key]
+                session.add_subscriber(ws)
+                return session
+        return None
+    
+    def unsubscribe(self, source_key: SourceKey, ws) -> bool:
+        """取消订阅"""
+        with self._lock:
+            if source_key in self._sessions:
+                session = self._sessions[source_key]
+                session.remove_subscriber(ws)
+                # 不立即删除，让 cleanup 线程处理
+                return True
+        return False
+    
+    def _cleanup_loop(self) -> None:
+        """定期清理空闲 session"""
+        inf("[SourceSessionManager] Cleanup thread started")
+        
+        try:
+            while True:
+                time.sleep(self.cleanup_interval)
+                try:
+                    self._cleanup_idle_sessions()
+                except Exception as e:
+                    wrn(f"[SourceSessionManager] Cleanup error: {e}")
+        except Exception as e:
+            err(f"[SourceSessionManager] Cleanup thread fatal error: {e}")
+    
+    def _cleanup_idle_sessions(self) -> None:
+        """清理空闲的 session"""
+        with self._lock:
+            idle_keys = []
+            for source_key, session in self._sessions.items():
+                if session.is_idle():
+                    idle_keys.append(source_key)
+            
+            for key in idle_keys:
+                session = self._sessions.pop(key)
+                try:
+                    session.stop()
+                    print(f"{get_timestamp()} [SourceSessionManager] Cleaned up idle session: {key}", 
+                          flush=True)
+                except Exception as e:
+                    print(f"{get_timestamp()} [SourceSessionManager] Error cleaning session {key}: {e}", 
+                          flush=True)
+    
+    def close_all(self) -> None:
+        """关闭所有 session"""
+        inf("[SourceSessionManager] Closing all sessions...")
+        
+        try:
+            with self._lock:
+                for session in list(self._sessions.values()):
+                    try:
+                        session.stop()
+                    except Exception as e:
+                        err(f"[SourceSessionManager] Error closing session: {e}")
+                self._sessions.clear()
+        except Exception as e:
+            err(f"[SourceSessionManager] Error in close_all: {e}")
+        
+        inf("[SourceSessionManager] All sessions closed")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """获取全局统计信息"""
+        with self._lock:
+            sessions_stats = []
+            for session in self._sessions.values():
+                sessions_stats.append(session.get_stats())
+            
+            return {
+                'total_sessions': len(self._sessions),
+                'total_subscribers': sum(s['subscriber_count'] for s in sessions_stats),
+                'sessions': sessions_stats
+            }
+
+
+# 全局单例
+_session_manager: Optional[SourceSessionManager] = None
+
+
+def get_session_manager() -> SourceSessionManager:
+    """获取全局会话管理器"""
+    global _session_manager
+    if _session_manager is None:
+        _session_manager = SourceSessionManager(idle_timeout=60, cleanup_interval=10)
+    return _session_manager

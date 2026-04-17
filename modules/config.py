@@ -26,7 +26,9 @@ MIN_WIDTH = 80  # 截图最小宽度
 MIN_HEIGHT = 80  # 截图最小高度
 
 # ------- 日志配置 -------
+DEBUG = True  # 是否启用调试日志
 LOG_DIR = str(BASE_DIR / "logs")  # 日志目录
+LOG_FILE = str(BASE_DIR / "logs" / "detector.log")  # 通用日志文件
 MATING_LOG_FILE = str(BASE_DIR / "logs" / "mating_events.log")  # mating事件日志文件
 STANDING_LOG_FILE = str(BASE_DIR / "logs" / "standing_events.log")  # standing事件日志文件
 

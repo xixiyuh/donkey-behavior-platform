@@ -30,6 +30,7 @@ from .streams import open_source
 from .websocket_manager import WSManager
 from .overlays import put_fps
 from .stream_manager import get_stream_manager
+from .source_session_manager import get_session_manager, SourceKey
 
 from backend.apis import router as farm_router, register_start_detection_func, register_stop_detection_func
 from backend.models import CameraConfig
@@ -57,9 +58,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"{get_timestamp()} Warning: Database initialization failed (MySQL may not be available): {e}")
         
-        # 初始化流管理器
+        # 初始化流管理器（裸流共享）
         stream_mgr = get_stream_manager()
         print(f"{get_timestamp()} Stream manager initialized")
+        
+        # 初始化会话管理器（完整 pipeline 共享）
+        session_mgr = get_session_manager()
+        print(f"{get_timestamp()} Source session manager initialized")
         
         _detector = get_detector()
         # 预热模型
@@ -105,6 +110,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"{get_timestamp()} Warning during scheduler shutdown: {e}")
 
+    # 关闭所有会话
+    try:
+        session_mgr = get_session_manager()
+        session_mgr.close_all()
+        print(f"{get_timestamp()} Source session manager closed")
+    except Exception as e:
+        print(f"{get_timestamp()} Warning during session manager shutdown: {e}")
+    
     # 关闭所有流
     try:
         stream_mgr = get_stream_manager()
@@ -149,13 +162,25 @@ scheduler = BackgroundScheduler()
 
 # 摄像头检测管理
 class CameraDetectionManager:
+    """
+    摄像头定时检测管理器
+    
+    改造要点：
+    - 使用 SourceSessionManager 来管理 pipeline
+    - 最小化改动，保留重连逻辑
+    - 与 WebSocket 用户共享同一路摄像头的 pipeline
+    """
+    
     def __init__(self):
-        self.active_detections = {}  # 存储 (thread, stop_event) 元组
+        self.active_detections = {}  # 存储 (thread, stop_event, source_key) 元组
         self.lock = threading.Lock()
+        self.session_mgr = get_session_manager()
     
     def start_detection(self, camera_config):
         """启动单个摄像头的检测"""
         config_id = camera_config['id']
+        flv_url = camera_config['flv_url']
+        camera_id = camera_config.get('camera_id')
         
         with self.lock:
             if config_id in self.active_detections:
@@ -165,117 +190,194 @@ class CameraDetectionManager:
         # 创建检测线程
         stop_event = threading.Event()
         
+        # 生成 source key - 注意：这里使用 camera_id 而不是 value，确保相同摄像头共用 session
+        source_key = SourceKey(kind='flv', value=flv_url, camera_id=camera_id)
+        
         def detection_thread():
-            print(f"{get_timestamp()} [Detection] Starting detection for camera {config_id}: {camera_config['camera_id']}")
+            print(f"{get_timestamp()} [Detection] Starting detection for camera {config_id}: {camera_id} ({flv_url[:50]}...)")
             
-            stream = None
-            result_queue = queue.Queue(maxsize=C.QUEUE_MAX)
+            session = None
+            task_subscriber = f"scheduled_task_{config_id}"
             
             def is_within_time_range():
                 """判断当前时间是否在摄像头配置的时间范围内"""
-                current_time = datetime.now().time()
-                start_time = datetime.strptime(camera_config.get('start_time', '09:00'), '%H:%M').time()
-                end_time = datetime.strptime(camera_config.get('end_time', '19:00'), '%H:%M').time()
-                return start_time <= current_time <= end_time
-            
-            def reconnect():
-                """尝试重新连接视频流"""
-                nonlocal stream
                 try:
-                    print(f"{get_timestamp()} [Detection] Attempting to reconnect to camera {config_id}")
-                    stream = open_source('flv', camera_config['flv_url'])
-                    # 设置摄像头、栏和舍的ID
-                    stream.camera_id = camera_config['camera_id']
-                    stream.pen_id = camera_config['pen_id']
-                    stream.barn_id = camera_config['barn_id']
-                    return True
+                    current_time = datetime.now().time()
+                    start_time = datetime.strptime(camera_config.get('start_time', '00:00'), '%H:%M').time()
+                    end_time = datetime.strptime(camera_config.get('end_time', '23:59'), '%H:%M').time()
+                    
+                    # 处理跨午夜的情况
+                    if start_time <= end_time:
+                        return start_time <= current_time <= end_time
+                    else:
+                        return current_time >= start_time or current_time <= end_time
                 except Exception as e:
-                    print(f"{get_timestamp()} [Detection] Reconnection failed for camera {config_id}: {e}")
-                    return False
+                    print(f"{get_timestamp()} [Detection] Error checking time range: {e}")
+                    return True  # 遇到错误时允许运行
+            
+            def try_reconnect():
+                """双阶段重连机制"""
+                nonlocal session
+                
+                # 第一阶段：10秒间隔最多4次
+                first_stage_retries = 4
+                for attempt in range(1, first_stage_retries + 1):
+                    if stop_event.is_set():
+                        print(f"{get_timestamp()} [Reconnect] Stage 1 cancelled for camera {config_id}")
+                        return None
+                    
+                    if not is_within_time_range():
+                        print(f"{get_timestamp()} [Reconnect] Camera {config_id} outside working hours, deferring")
+                        return None
+                    
+                    try:
+                        print(f"{get_timestamp()} [Reconnect] Stage 1 - Attempt {attempt}/{first_stage_retries} for camera {config_id}")
+                        
+                        # 创建新的流对象
+                        stream = open_source('flv', flv_url)
+                        stream.camera_id = camera_id
+                        stream.pen_id = camera_config.get('pen_id')
+                        stream.barn_id = camera_config.get('barn_id')
+                        
+                        detector = PTDetector(C.PT_MODEL_PATH)
+                        
+                        # 从 session manager 获取或创建 session
+                        session = self.session_mgr.get_or_create_session(source_key, stream, detector)
+                        
+                        # 注册为订阅者
+                        session.add_subscriber(task_subscriber)
+                        
+                        print(f"{get_timestamp()} [Reconnect] Stage 1 - Successfully connected camera {config_id}")
+                        
+                        # 读取几帧验证连接有效
+                        test_frame = session.get_latest_result()
+                        if test_frame is not None:
+                            return session
+                        
+                        # 如果没有帧，继续重试
+                        session.remove_subscriber(task_subscriber)
+                        
+                    except Exception as e:
+                        print(f"{get_timestamp()} [Reconnect] Stage 1 - Connection failed (attempt {attempt}): {e}")
+                    
+                    # 等待10秒后重试
+                    time.sleep(10)
+                
+                # 第一阶段失败，进入第二阶段
+                print(f"{get_timestamp()} [Reconnect] Stage 1 exhausted for camera {config_id}, entering Stage 2")
+                
+                # 第二阶段：先等待1小时
+                wait_minutes = 60
+                for remaining in range(wait_minutes, 0, -1):
+                    if stop_event.is_set():
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 wait cancelled for camera {config_id}")
+                        return None
+                    
+                    if remaining % 10 == 0 or remaining <= 5:  # 每10分钟打印一次，最后5分钟每分钟打印
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 - Waiting {remaining} minutes before retrying camera {config_id}")
+                    
+                    time.sleep(60)
+                
+                # 第二阶段：再按10秒间隔额外尝试3次
+                second_stage_retries = 3
+                for attempt in range(1, second_stage_retries + 1):
+                    if stop_event.is_set():
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 cancelled for camera {config_id}")
+                        return None
+                    
+                    if not is_within_time_range():
+                        print(f"{get_timestamp()} [Reconnect] Camera {config_id} outside working hours, giving up")
+                        return None
+                    
+                    try:
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 - Attempt {attempt}/{second_stage_retries} for camera {config_id}")
+                        
+                        stream = open_source('flv', flv_url)
+                        stream.camera_id = camera_id
+                        stream.pen_id = camera_config.get('pen_id')
+                        stream.barn_id = camera_config.get('barn_id')
+                        
+                        detector = PTDetector(C.PT_MODEL_PATH)
+                        
+                        session = self.session_mgr.get_or_create_session(source_key, stream, detector)
+                        session.add_subscriber(task_subscriber)
+                        
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 - Successfully connected camera {config_id}")
+                        
+                        test_frame = session.get_latest_result()
+                        if test_frame is not None:
+                            return session
+                        
+                        session.remove_subscriber(task_subscriber)
+                        
+                    except Exception as e:
+                        print(f"{get_timestamp()} [Reconnect] Stage 2 - Connection failed (attempt {attempt}): {e}")
+                    
+                    time.sleep(10)
+                
+                print(f"{get_timestamp()} [Reconnect] Stage 2 exhausted for camera {config_id}, giving up permanently")
+                return None
             
             try:
-                det = get_detector()
-                stream = open_source('flv', camera_config['flv_url'])
+                # 初始连接（使用重连逻辑）
+                session = try_reconnect()
                 
-                # 设置摄像头、栏和舍的ID
-                stream.camera_id = camera_config['camera_id']
-                stream.pen_id = camera_config['pen_id']
-                stream.barn_id = camera_config['barn_id']
+                if session is None:
+                    print(f"{get_timestamp()} [Detection] Failed to establish connection for camera {config_id}")
+                    return
                 
-                # 启动处理线程
-                t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
-
+                print(f"{get_timestamp()} [Detection] Registered scheduled task as subscriber for {source_key}")
                 
                 # 持续运行，直到停止事件被设置
+                last_check_time = time.time()
                 while not stop_event.is_set():
-                    time.sleep(1)
-                    
+                    try:
+                        # 定期检查是否在工作时间内
+                        current_time = time.time()
+                        if current_time - last_check_time > 300:  # 每5分钟检查一次时间范围
+                            if not is_within_time_range():
+                                print(f"{get_timestamp()} [Detection] Camera {config_id} is outside time range, pausing")
+                                time.sleep(60)
+                                continue
+                            last_check_time = current_time
+                        
+                        # 检查session是否仍然有效
+                        frame = session.get_latest_result()
+                        if frame is None and not stop_event.is_set():
+                            print(f"{get_timestamp()} [Detection] Lost frames from camera {config_id}, attempting reconnection")
+                            session.remove_subscriber(task_subscriber)
+                            session = try_reconnect()
+                            if session is None:
+                                print(f"{get_timestamp()} [Detection] Reconnection failed for camera {config_id}")
+                                break
+                        
+                        time.sleep(1)
+                        
+                    except Exception as e:
+                        print(f"{get_timestamp()} [Detection] Error monitoring camera {config_id}: {e}")
+                        if not stop_event.is_set():
+                            print(f"{get_timestamp()} [Detection] Attempting reconnection for camera {config_id}")
+                            try:
+                                session.remove_subscriber(task_subscriber)
+                            except:
+                                pass
+                            session = try_reconnect()
+                            if session is None:
+                                break
+                        
             except Exception as e:
-                print(f"{get_timestamp()} [Detection] Error for camera {config_id}: {e}")
-                
-                # 自动重连逻辑
-                reconnect_attempts = 0
-                max_reconnect_attempts = 4
-                
-                # 第一次重连：10秒间隔，最多4次
-                while reconnect_attempts < max_reconnect_attempts and not stop_event.is_set():
-                    if not is_within_time_range():
-                        print(f"{get_timestamp()} [Detection] Camera {config_id} is outside time range, stopping reconnection")
-                        break
+                print(f"{get_timestamp()} [Detection] Fatal error for camera {config_id}: {e}")
                     
-                    print(f"{get_timestamp()} [Detection] Attempting to reconnect ({reconnect_attempts + 1}/{max_reconnect_attempts})...")
-                    time.sleep(10)  # 等待10秒
-                    
-                    if reconnect():
-                        print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
-                        # 重新启动处理线程
-                        t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
-                        # 继续运行
-                        while not stop_event.is_set():
-                            time.sleep(1)
-                        break
-                    
-                    reconnect_attempts += 1
-                
-                # 如果第一次重连失败，等待1小时后进行第二次重连
-                if reconnect_attempts >= max_reconnect_attempts and not stop_event.is_set():
-                    print(f"{get_timestamp()} [Detection] All initial reconnection attempts failed for camera {config_id}, waiting 1 hour...")
-                    time.sleep(3600)  # 等待1小时
-                    
-                    # 第二次重连：10秒间隔，最多3次
-                    reconnect_attempts = 0
-                    max_reconnect_attempts = 3
-                    
-                    while reconnect_attempts < max_reconnect_attempts and not stop_event.is_set():
-                        if not is_within_time_range():
-                            print(f"{get_timestamp()} [Detection] Camera {config_id} is outside time range, stopping reconnection")
-                            break
-                        
-                        print(f"{get_timestamp()} [Detection] Attempting to reconnect after 1 hour ({reconnect_attempts + 1}/{max_reconnect_attempts})...")
-                        time.sleep(10)  # 等待10秒
-                        
-                        if reconnect():
-                            print(f"{get_timestamp()} [Detection] Reconnection successful for camera {config_id}")
-                            # 重新启动处理线程
-                            t_reader, t_infer = start_pipeline(stream, det, result_queue, stop_event, camera_config)
-                            # 继续运行
-                            while not stop_event.is_set():
-                                time.sleep(1)
-                            break
-                        
-                        reconnect_attempts += 1
             finally:
                 print(f"{get_timestamp()} [Detection] Stopping detection for camera {config_id}")
                 
-                # 停止后台线程
-                stop_event.set()
-                
-                # 释放流资源
-                if stream:
+                # 取消注册订阅并释放资源
+                if session:
                     try:
-                        stream.release()
+                        session.remove_subscriber(task_subscriber)
+                        print(f"{get_timestamp()} [Detection] Unregistered scheduled task from {source_key}")
                     except Exception as e:
-                        print(f"{get_timestamp()} [Detection] Error releasing stream: {e}")
+                        print(f"{get_timestamp()} [Detection] Error unregistering: {e}")
                 
                 with self.lock:
                     if config_id in self.active_detections:
@@ -286,7 +388,7 @@ class CameraDetectionManager:
         thread.start()
         
         with self.lock:
-            self.active_detections[config_id] = (thread, stop_event)
+            self.active_detections[config_id] = (thread, stop_event, source_key)
         
         print(f"{get_timestamp()} [Detection] Started detection for camera {config_id}")
     
@@ -294,7 +396,7 @@ class CameraDetectionManager:
         """停止单个摄像头的检测"""
         with self.lock:
             if config_id in self.active_detections:
-                thread, stop_event = self.active_detections[config_id]
+                thread, stop_event, source_key = self.active_detections[config_id]
                 stop_event.set()
                 print(f"{get_timestamp()} [Detection] Stopping camera {config_id}")
     
@@ -374,6 +476,24 @@ async def get_stream_statistics():
             "status": "ok",
             "timestamp": datetime.now().isoformat(),
             "streams": stats
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.get("/session-stats")
+async def get_session_statistics():
+    """获取会话管理器统计信息 - 查看当前 session 的使用情况和订阅者数量"""
+    try:
+        session_mgr = get_session_manager()
+        stats = session_mgr.get_stats()
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "sessions": stats
         }
     except Exception as e:
         return {
@@ -599,58 +719,95 @@ async def ws_endpoint(
         pen_id: Optional[int] = Query(None, description="Pen ID"),
         barn_id: Optional[int] = Query(None, description="Barn ID"),
 ):
+    """
+    WebSocket 端点 - 多订阅者共享 pipeline 架构
+    
+    新架构流程：
+    1. 根据 kind+value+camera_id 生成唯一的 source_key
+    2. 从 session_manager 获取或创建 SourceSession
+    3. 将当前 WebSocket 注册为该 session 的订阅者
+    4. 接收 session 广播的检测结果
+    5. 断开时自动取消订阅和释放资源
+    
+    好处：
+    - 同一视频源只有一个 reader 和一个 infer 线程
+    - 多个连接共享检测结果，避免重复推理
+    - 线程数不再线性增长，资源利用率大幅提升
+    """
     await ws.accept()
     await ws_manager.register(ws)
 
-    print(f"{get_timestamp()} [WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", flush=True)
+    print(f"{get_timestamp()} [WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", 
+          flush=True)
 
-    stream = None
-    stream_key = None
-    stop_event = threading.Event()
-    result_queue: queue.Queue = queue.Queue(maxsize=C.QUEUE_MAX)
-    threads = None
+    session_mgr = get_session_manager()
+    source_key = None
+    session = None
 
     try:
-        det = get_detector()
-
         # 前端是 urlencode 过的,这里必须 decode
         if value is not None:
             value = unquote(value)
         print(f"{get_timestamp()} [WS] DECODED value = {value}", flush=True)
 
-        # 使用流管理器获取流 - 支持流复用和引用计数
-        stream_mgr = get_stream_manager()
+        # 生成唯一的 source key
+        source_key = SourceKey(kind=kind, value=value, camera_id=camera_id)
+        print(f"{get_timestamp()} [WS] Source key: {source_key}", flush=True)
+
+        # 在线程池中创建 stream 和 detector（阻塞操作）
         loop = asyncio.get_event_loop()
-        stream, stream_key = await loop.run_in_executor(
-            None, 
-            lambda: stream_mgr.get_stream(kind, value or "")
-        )
         
-        # 设置摄像头、栏和舍的ID
-        if camera_id:
-            stream.camera_id = camera_id
-        if pen_id:
-            stream.pen_id = pen_id
-        if barn_id:
-            stream.barn_id = barn_id
-        print(f"{get_timestamp()} [WS] Stream configured: camera_id={stream.camera_id if hasattr(stream, 'camera_id') else None}, pen_id={stream.pen_id if hasattr(stream, 'pen_id') else None}, barn_id={stream.barn_id if hasattr(stream, 'barn_id') else None}", flush=True)
+        def _create_session():
+            """在线程中创建或获取 session"""
+            # 1. 创建流
+            stream = open_source(kind, value or "")
+            
+            # 2. 设置元数据
+            if camera_id:
+                stream.camera_id = camera_id
+            if pen_id:
+                stream.pen_id = pen_id
+            if barn_id:
+                stream.barn_id = barn_id
+            
+            # 3. 为本 session 创建专属 detector
+            detector = PTDetector(C.PT_MODEL_PATH)
+            
+            # 4. 从 session_manager 获取或创建 session
+            # 这是关键：如果同源已有 session，就复用；否则创建新的
+            return session_mgr.get_or_create_session(source_key, stream, detector)
+        
+        session = await loop.run_in_executor(None, _create_session)
+        
+        # 将当前 WebSocket 注册为该 session 的订阅者
+        session.add_subscriber(ws)
+        print(f"{get_timestamp()} [WS] Registered as subscriber, session: {source_key}", flush=True)
 
-        # 启动处理线程
-        # 对于WebSocket连接，没有camera_config，所以传递None
-        threads = start_pipeline(stream, det, result_queue, stop_event, None)
-
-        # 异步处理帧数据
+        # 接收 session 的广播结果并发送给客户端
+        frame_count = 0
         while True:
             try:
-                # 使用非阻塞方式获取帧
-                try:
-                    frame = result_queue.get(block=False)
-                except queue.Empty:
-                    await asyncio.sleep(0.01)
+                # 获取最新检测结果
+                frame = session.get_latest_result()
+                
+                if frame is None:
+                    # 等待第一帧可用
+                    await asyncio.sleep(0.05)
                     continue
 
-                # 异步发送帧数据
-                await ws_manager.send_frame(ws, frame) 
+                # 打印广播日志（每10帧打印一次）
+                if frame_count % 10 == 0:
+                    with session.subscribers_lock:
+                        print(f"{get_timestamp()} [BROADCAST] source_key={source_key} frame_id={frame_count} subscriber_count={len(session.subscribers)}", flush=True)
+                
+                # 异步发送帧数据给客户端
+                await ws_manager.send_frame(ws, frame)
+                
+                # 打印发送日志（每10帧打印一次）
+                if frame_count % 10 == 0:
+                    print(f"{get_timestamp()} [SEND] source_key={source_key} ws_id={id(ws)} frame_id={frame_count}", flush=True)
+                
+                frame_count += 1
 
             except asyncio.CancelledError:
                 break
@@ -666,31 +823,19 @@ async def ws_endpoint(
     finally:
         print(f"{get_timestamp()} [WS] Cleaning up...", flush=True)
 
-        # 1. 停止后台线程
-        stop_event.set()
-
-        # 2. 等待线程结束（最多 2 秒）
-        if threads:
-            t_reader, t_infer = threads
-            for t, name in [(t_reader, "reader"), (t_infer, "infer")]:
-                if t and t.is_alive():
-                    t.join(timeout=2.0)
-                    if t.is_alive():
-                        print(f"{get_timestamp()} [WS] Warning: {name} thread still alive after timeout", flush=True)
-
-        # 3. 使用流管理器释放流 - 只有当引用计数为0时才真正释放资源
-        if stream_key:
+        # 从 session 中注销该订阅者
+        # session 如果引用计数为 0，会被后台清理线程在 TTL 后销毁
+        if session and source_key:
             try:
-                stream_mgr = get_stream_manager()
-                stream_mgr.release_stream(stream_key)
-                print(f"{get_timestamp()} [WS] Stream released and managed by stream manager", flush=True)
+                session.remove_subscriber(ws)
+                print(f"{get_timestamp()} [WS] Unregistered from session: {source_key}", flush=True)
             except Exception as e:
-                print(f"{get_timestamp()} [WS] Error releasing stream: {e}", flush=True)
+                print(f"{get_timestamp()} [WS] Error unregistering from session: {e}", flush=True)
 
-        # 4. 注销 WebSocket
+        # 注销 WebSocket
         await ws_manager.unregister(ws)
 
-        # 5. 关闭 WebSocket 连接
+        # 关闭 WebSocket 连接
         try:
             await ws.close()
         except Exception:
