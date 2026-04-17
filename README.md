@@ -5,7 +5,7 @@ mpv --msg-level=all=info "https://rtmp16open.ys7.com:9188/v3/openlive/FR3098735_
 ● Audio  --aid=1  (pcm_alaw 1ch 8000 Hz 64 kbps)
 AO: [wasapi] 48000Hz stereo 2ch float
 VO: [gpu-next] 704x576 yuv420p
-
+//开启视频流共享功能
 # 前后端服务部署指南
 根据我对项目结构的分析，这是一个基于 Python FastAPI 后端和 Vue 3 前端的实时检测系统。下面是完整的部署方案，让您的服务可以通过网址被所有人访问。
 
