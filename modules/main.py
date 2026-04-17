@@ -29,9 +29,11 @@ from .detector_pt import PTDetector
 from .streams import open_source
 from .websocket_manager import WSManager
 from .overlays import put_fps
+from .stream_manager import get_stream_manager
 
 from backend.apis import router as farm_router, register_start_detection_func, register_stop_detection_func
 from backend.models import CameraConfig
+from backend.database import init_db
 
 def get_detector():
     """为每个连接创建一个新的检测器实例"""
@@ -48,6 +50,17 @@ async def lifespan(app: FastAPI):
     global _detector
     print(f"{get_timestamp()} Starting RK3588 Realtime Detector...")
     try:
+        # 初始化数据库
+        try:
+            init_db()
+            print(f"{get_timestamp()} Database initialized successfully")
+        except Exception as e:
+            print(f"{get_timestamp()} Warning: Database initialization failed (MySQL may not be available): {e}")
+        
+        # 初始化流管理器
+        stream_mgr = get_stream_manager()
+        print(f"{get_timestamp()} Stream manager initialized")
+        
         _detector = get_detector()
         # 预热模型
         dummy = (np.zeros((C.IMG_SIZE[1], C.IMG_SIZE[0], 3), dtype=np.uint8) + 127)
@@ -91,6 +104,14 @@ async def lifespan(app: FastAPI):
         print(f"{get_timestamp()} Scheduler stopped successfully")
     except Exception as e:
         print(f"{get_timestamp()} Warning during scheduler shutdown: {e}")
+
+    # 关闭所有流
+    try:
+        stream_mgr = get_stream_manager()
+        stream_mgr.close_all()
+        print(f"{get_timestamp()} Stream manager closed")
+    except Exception as e:
+        print(f"{get_timestamp()} Warning during stream manager shutdown: {e}")
 
     if _detector:
         try:
@@ -343,6 +364,24 @@ async def health_check():
         return {"status": "error", "error": str(e)}
 
 
+@app.get("/stream-stats")
+async def get_stream_statistics():
+    """获取流管理器的统计信息 - 查看当前流的使用情况和引用计数"""
+    try:
+        stream_mgr = get_stream_manager()
+        stats = stream_mgr.get_stats()
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "streams": stats
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
 from fastapi import UploadFile, File
 import os
 
@@ -566,6 +605,7 @@ async def ws_endpoint(
     print(f"{get_timestamp()} [WS] New connection: kind={kind}, value={value}, camera_id={camera_id}, pen_id={pen_id}, barn_id={barn_id}", flush=True)
 
     stream = None
+    stream_key = None
     stop_event = threading.Event()
     result_queue: queue.Queue = queue.Queue(maxsize=C.QUEUE_MAX)
     threads = None
@@ -578,11 +618,12 @@ async def ws_endpoint(
             value = unquote(value)
         print(f"{get_timestamp()} [WS] DECODED value = {value}", flush=True)
 
-        # 异步打开视频源，避免阻塞事件循环
+        # 使用流管理器获取流 - 支持流复用和引用计数
+        stream_mgr = get_stream_manager()
         loop = asyncio.get_event_loop()
-        stream = await loop.run_in_executor(
+        stream, stream_key = await loop.run_in_executor(
             None, 
-            lambda: open_source(kind, value or "")
+            lambda: stream_mgr.get_stream(kind, value or "")
         )
         
         # 设置摄像头、栏和舍的ID
@@ -637,11 +678,12 @@ async def ws_endpoint(
                     if t.is_alive():
                         print(f"{get_timestamp()} [WS] Warning: {name} thread still alive after timeout", flush=True)
 
-        # 3. 释放流资源
-        if stream:
+        # 3. 使用流管理器释放流 - 只有当引用计数为0时才真正释放资源
+        if stream_key:
             try:
-                stream.release()
-                print(f"{get_timestamp()} [WS] Stream released", flush=True)
+                stream_mgr = get_stream_manager()
+                stream_mgr.release_stream(stream_key)
+                print(f"{get_timestamp()} [WS] Stream released and managed by stream manager", flush=True)
             except Exception as e:
                 print(f"{get_timestamp()} [WS] Error releasing stream: {e}", flush=True)
 

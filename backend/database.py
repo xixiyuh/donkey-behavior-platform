@@ -104,5 +104,5 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 初始化数据库
-init_db()
+# 初始化数据库 - 移到应用启动时调用，避免导入时数据库不可用导致服务启动失败
+# init_db()
