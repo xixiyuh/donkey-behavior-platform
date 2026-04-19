@@ -339,12 +339,19 @@ const startWithFile = (filePath: string) => {
 // 启动函数
 const start = () => {
   let value = '';
+  let cameraId = ''; // 摄像头的真实ID
 
   // 如果选择了摄像头,则使用摄像头的FLV地址
   if (selectedCamera.value) {
     value = selectedCamera.value;
-    kind.value = 'mpv'; // 使用MPV模式处理FLV流
+    
+    // 从摄像头列表中找到对应的camera对象,获取真实的camera_id
+    const selectedCameraObj = cameras.value.find(cam => cam.flv_url === value);
+    cameraId = selectedCameraObj?.camera_id || value; // 优先使用真实camera_id,否则使用URL
+    
+    kind.value = 'flv'; // 使用FLV格式，与后台检测共享同一套pipeline
     log(`使用摄像头地址: ${value}`, 'info');
+    log(`使用摄像头ID: ${cameraId}`, 'info');
   } else {
     log('请选择文件或摄像头', 'error');
     return;
@@ -362,7 +369,7 @@ const start = () => {
 
   log(`正在连接: ${kind.value} - ${value}`, 'info');
   isLoading.value = true;
-  connect(kind.value, value, 'camera-' + selectedCamera.value, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
+  connect(kind.value, value, cameraId, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
   // 假设连接成功后会设置isConnected为true,我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {

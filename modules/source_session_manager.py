@@ -32,23 +32,43 @@ def get_timestamp():
 
 @dataclass
 class SourceKey:
-    """视频源唯一标识：(kind, value, camera_id)"""
+    """视频源唯一标识：(kind, value, camera_id)
+    
+    比较逻辑：
+    - 如果有 camera_id，则仅用 camera_id 来判断相等性（同一摄像头无论访问方式不同都视为同源）
+    - 如果没有 camera_id，则用 (kind, value) 来判断相等性
+    """
     kind: str
     value: str
     camera_id: Optional[str] = None
     
     def __hash__(self):
-        return hash((self.kind, self.value, self.camera_id))
+        # 如果有 camera_id，优先使用 camera_id 作为唯一标识
+        if self.camera_id:
+            return hash(('camera_id', self.camera_id))
+        return hash((self.kind, self.value))
     
     def __eq__(self, other):
         if not isinstance(other, SourceKey):
             return False
-        return (self.kind == other.kind and 
-                self.value == other.value and 
-                self.camera_id == other.camera_id)
+        
+        # 优先比较 camera_id（如果有的话）
+        # 这确保相同摄像头无论怎样访问（前端 mpv / 后台 flv）都被认为是同一源
+        if self.camera_id and other.camera_id:
+            return self.camera_id == other.camera_id
+        
+        # 都没有 camera_id 时，才比较 kind 和 value
+        if not self.camera_id and not other.camera_id:
+            return self.kind == other.kind and self.value == other.value
+        
+        # 一个有 camera_id 一个没有，不相等
+        return False
     
     def __repr__(self):
         cam_suffix = f"@{self.camera_id}" if self.camera_id else ""
+        if self.camera_id:
+            # 如果有 camera_id，则主要展示 camera_id
+            return f"SourceKey(camera={self.camera_id})"
         return f"SourceKey({self.kind}:{self.value[:30]}...{cam_suffix})"
 
 
