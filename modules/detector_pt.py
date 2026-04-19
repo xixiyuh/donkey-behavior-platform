@@ -1,3 +1,4 @@
+# modules/detector_pt.py
 import time
 import numpy as np
 from ultralytics import YOLO
@@ -12,7 +13,7 @@ class PTDetector:
     def infer_once(self, frame_bgr: np.ndarray):
         t0 = time.time()
 
-        # 注意：这里改成 track，不是 predict
+        # 调用ByteTrack进行跟踪
         r = self.model.track(
             frame_bgr,
             persist=True,
@@ -45,8 +46,8 @@ class PTDetector:
                 "timestamp": datetime.now()
             })
 
-        if camera_id and pen_id and barn_id:
-            self.mating_detector.detect_mating(frame_bgr, detections, camera_id, pen_id, barn_id)
+        # 调用mating_detector.detect_mating，即使参数为None，detect_mating方法会使用默认值-1
+        self.mating_detector.detect_mating(frame_bgr, detections, camera_id, pen_id, barn_id)
 
         return r.plot(
             line_width=2,

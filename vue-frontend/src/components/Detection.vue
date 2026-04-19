@@ -6,6 +6,7 @@
       <small>
         <strong>支持输入源：</strong> 本地视频 | 本地图片<br>
         <strong>AI模型：</strong> YOLOv8 + 对比学习交配行为识别<br>
+
       </small>
     </div>
 
@@ -15,7 +16,7 @@
         <select
           id="barn"
           v-model="selectedBarn"
-          @change="loadPens"
+          @change="loadPens"   <!-- 选完牛舍,自动加载该牛舍下的栏位 -->
         >
           <option value="">请选择养殖舍</option>
           <option
@@ -149,7 +150,7 @@ const { uploadFile, deleteFile, checkHealth: checkSystemHealth } = useApi();
 const barns = ref<Barn[]>([]);
 const pens = ref<Pen[]>([]);
 const cameras = ref<Camera[]>([]);
-const selectedBarn = ref<string>('');
+const selectedBarn = ref<string>('');//创建一个【响应式字符串变量】用来存【当前选中的牛舍ID】一开始是空
 const selectedPen = ref<string>('');
 const selectedCamera = ref<string>('');
 const kind = ref<string>('file');
@@ -234,7 +235,7 @@ const loadPens = async () => {
 // 加载摄像头列表
 const loadCameras = async () => {
   if (!selectedPen.value) {
-    // 如果没有选择栏，加载该养殖舍的所有摄像头
+    // 如果没有选择栏,加载该养殖舍的所有摄像头
     if (selectedBarn.value) {
       try {
         const penList = await barnStore.fetchBarnPens(Number(selectedBarn.value));
@@ -247,7 +248,7 @@ const loadCameras = async () => {
         log('加载养殖舍摄像头失败', 'error');
       }
     } else {
-      // 如果没有选择养殖舍，加载所有摄像头
+      // 如果没有选择养殖舍,加载所有摄像头
       await loadAllCameras();
     }
     selectedCamera.value = '';
@@ -276,7 +277,7 @@ const handleFileSelect = (event: Event) => {
     const file = input.files[0];
     log(`文件信息: ${file.name} (${file.size} bytes, ${file.type})`, 'info');
 
-    // 先断开现有连接，避免冲突
+    // 先断开现有连接,避免冲突
     if (isConnected.value) {
       log('断开现有连接以处理新文件', 'info');
       disconnect();
@@ -286,9 +287,9 @@ const handleFileSelect = (event: Event) => {
     // 上传文件（非阻塞）
     uploadFile(file).then(result => {
       if (result.success && result.file_path) {
-        log(`文件上传成功，路径: ${result.file_path}`, 'success');
+        log(`文件上传成功,路径: ${result.file_path}`, 'success');
 
-        // 保存当前文件名，用于后续删除
+        // 保存当前文件名,用于后续删除
         currentFileName.value = file.name;
         log(`已记录文件名: ${file.name}`, 'info');
 
@@ -327,23 +328,30 @@ const startWithFile = (filePath: string) => {
   log(`正在连接: ${kind.value} - ${filePath}`, 'info');
   isLoading.value = true;
   connect(kind.value, filePath, 'local-file', selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
-  // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
+  // 假设连接成功后会设置isConnected为true,我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {
       isLoading.value = false;
     }
-  }, 5000); // 5秒后如果还没连接成功，自动关闭加载状态
+  }, 5000); // 5秒后如果还没连接成功,自动关闭加载状态
 };
 
 // 启动函数
 const start = () => {
   let value = '';
+  let cameraId = ''; // 摄像头的真实ID
 
-  // 如果选择了摄像头，则使用摄像头的FLV地址
+  // 如果选择了摄像头,则使用摄像头的FLV地址
   if (selectedCamera.value) {
     value = selectedCamera.value;
-    kind.value = 'mpv'; // 使用MPV模式处理FLV流
+    
+    // 从摄像头列表中找到对应的camera对象,获取真实的camera_id
+    const selectedCameraObj = cameras.value.find(cam => cam.flv_url === value);
+    cameraId = selectedCameraObj?.camera_id || value; // 优先使用真实camera_id,否则使用URL
+    
+    kind.value = 'flv'; // 使用FLV格式，与后台检测共享同一套pipeline
     log(`使用摄像头地址: ${value}`, 'info');
+    log(`使用摄像头ID: ${cameraId}`, 'info');
   } else {
     log('请选择文件或摄像头', 'error');
     return;
@@ -361,13 +369,13 @@ const start = () => {
 
   log(`正在连接: ${kind.value} - ${value}`, 'info');
   isLoading.value = true;
-  connect(kind.value, value, 'camera-' + selectedCamera.value, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
-  // 假设连接成功后会设置isConnected为true，我们监听这个变化来关闭加载状态
+  connect(kind.value, value, cameraId, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
+  // 假设连接成功后会设置isConnected为true,我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {
       isLoading.value = false;
     }
-  }, 5000); // 5秒后如果还没连接成功，自动关闭加载状态
+  }, 5000); // 5秒后如果还没连接成功,自动关闭加载状态
 };
 
 // 停止函数
@@ -392,7 +400,7 @@ const stop = async () => {
     currentFileName.value = '';
   }
 
-  // 清空文件输入框，允许再次选择同一文件
+  // 清空文件输入框,允许再次选择同一文件
   if (fileInputRef.value) {
     fileInputRef.value.value = '';
   }
@@ -412,9 +420,9 @@ const checkHealth = async () => {
   }
 };
 
-// 监听连接状态变化，当连接状态改变时重置加载状态
-watch(isConnected, (newValue) => {
-  // 无论是连接成功还是关闭，都关闭加载状态
+// 监听连接状态变化,当连接状态改变时重置加载状态
+watch(isConnected, () => {
+  // 无论是连接成功还是关闭,都关闭加载状态
   isLoading.value = false;
 });
 
