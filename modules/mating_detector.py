@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 from backend.database import get_db_connection
-from .config import MATING_EVENT_MIN_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MATING_MAX_CONF_THRES, MIN_WIDTH, MIN_HEIGHT, MATING_COOLDOWN_PERIOD, MATING_MIN_MOVEMENT, MATING_HIGH_CONF_SKIP_MOVEMENT
+from .config import MATING_EVENT_MIN_DURATION, MATING_EVENT_MAX_DURATION, MATING_CONF_THRES, MATING_AVG_CONF_THRES, MATING_MAX_CONF_THRES, MIN_WIDTH, MIN_HEIGHT, MATING_COOLDOWN_PERIOD, MATING_MIN_MOVEMENT, MATING_HIGH_CONF_SKIP_MOVEMENT
 
 # 尝试导入contract detector，如果不存在则使用默认实现
 try:
@@ -329,7 +329,7 @@ class MatingDetector:
         self._cleanup_logs()
         
         # 检查事件持续时间是否达到阈值
-        if duration < MATING_EVENT_MIN_DURATION:
+        if duration < MATING_EVENT_MIN_DURATION or duration > MATING_EVENT_MAX_DURATION:
             # 删除所有截图
             self._cleanup_screenshots(event['screenshots'])
             return
@@ -418,7 +418,7 @@ class MatingDetector:
         self._log(f"Total movement: {total_movement:.2f} pixels, threshold: {MATING_MIN_MOVEMENT} pixels")
         
         # 检查移动距离是否达到阈值，只有当平均置信度低于高置信度阈值时才检查
-        if avg_confidence < MATING_HIGH_CONF_SKIP_MOVEMENT and total_movement < MATING_MIN_MOVEMENT:
+        if  total_movement < MATING_MIN_MOVEMENT:
             self._log(f"Mating event skipped (movement too small): camera={event['camera_id']}, pen={event['pen_id']}, barn={event['barn_id']}, movement={total_movement:.2f}px, threshold={MATING_MIN_MOVEMENT}px,avg_conf={avg_confidence:.2f}, max_conf={max_confidence:.2f},src={absolute_screenshots}")
             # 删除所有截图
             # self._cleanup_screenshots(event['screenshots'])
@@ -484,7 +484,7 @@ class MatingDetector:
             cursor.execute('''
             INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
                                avg_confidence, max_confidence, movement, screenshot)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (event['camera_id'], pen_id, barn_id, 
                   event['start_time'], end_time, duration, avg_confidence, max_confidence, 
                   total_movement, screenshot))

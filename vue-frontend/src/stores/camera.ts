@@ -211,6 +211,24 @@ export const useCameraStore = defineStore('camera', {
       }
     },
 
+    async setCameraConfigEnable(configId: number, enable: number) {
+      this.loading = true;
+      this.error = null;
+      try {
+        await axios.patch(`/api/camera-configs/${configId}/enable`, { enable });
+        // 更新本地状态
+        const config = this.cameraConfigs.find(c => c.id === configId);
+        if (config) {
+          config.enable = enable;
+        }
+      } catch (error: any) {
+        this.error = error.response?.data?.detail || '更新摄像头配置启用状态失败';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
     async deleteCameraConfig(configId: number) {
       this.loading = true;
       this.error = null;

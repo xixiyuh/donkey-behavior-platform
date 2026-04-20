@@ -178,21 +178,21 @@ class CameraDetectionManager:
     
     def start_detection(self, camera_config):
         """启动单个摄像头的检测"""
-        camera_config = dict(camera_config)
+        camera_config = dict(camera_config)  # 确保是字典类型
         config_id = camera_config['id']
         flv_url = camera_config['flv_url']
         camera_id = camera_config.get('camera_id')
         
         with self.lock:
             if config_id in self.active_detections:
-                # print(f"{get_timestamp()} [Detection] Camera {config_id} is already running")
+                print(f"{get_timestamp()} [Detection] Camera {config_id} is already running")
                 return
         
         # 创建检测线程
         stop_event = threading.Event()
         
         # 生成 source key - 注意：这里使用 camera_id 而不是 value，确保相同摄像头共用 session
-        source_key = SourceKey(kind='flv', value=flv_url, camera_id=camera_id)
+        source_key = SourceKey(kind='flv', value=flv_url, camera_id=camera_id, pen_id=camera_config.get('pen_id'), barn_id=camera_config.get('barn_id'))
         
         def detection_thread():
             print(f"{get_timestamp()} [Detection] Starting detection for camera {config_id}: {camera_id} ({flv_url[:50]}...)")
@@ -250,12 +250,12 @@ class CameraDetectionManager:
                         
                         print(f"{get_timestamp()} [Reconnect] Stage 1 - Successfully connected camera {config_id}")
                         
-                        # 读取几帧验证连接有效
-                        test_frame = session.get_latest_result()
-                        if test_frame is not None:
+                        # 验证推理线程是否启动并运行
+                        stats = session.get_stats()
+                        if stats.get('infer_alive', False):
                             return session
                         
-                        # 如果没有帧，继续重试
+                        # 如果推理线程没有启动，继续重试
                         session.remove_subscriber(task_subscriber)
                         
                     except Exception as e:
@@ -305,8 +305,9 @@ class CameraDetectionManager:
                         
                         print(f"{get_timestamp()} [Reconnect] Stage 2 - Successfully connected camera {config_id}")
                         
-                        test_frame = session.get_latest_result()
-                        if test_frame is not None:
+                        # 验证推理线程是否启动并运行
+                        stats = session.get_stats()
+                        if stats.get('infer_alive', False):
                             return session
                         
                         session.remove_subscriber(task_subscriber)
@@ -342,10 +343,10 @@ class CameraDetectionManager:
                                 continue
                             last_check_time = current_time
                         
-                        # 检查session是否仍然有效
-                        frame = session.get_latest_result()
-                        if frame is None and not stop_event.is_set():
-                            print(f"{get_timestamp()} [Detection] Lost frames from camera {config_id}, attempting reconnection")
+                        # 检查session是否仍然有效（检查推理线程是否活着）
+                        stats = session.get_stats()
+                        if not stats.get('infer_alive', False) and not stop_event.is_set():
+                            print(f"{get_timestamp()} [Detection] Inference thread died for camera {config_id}, attempting reconnection")
                             session.remove_subscriber(task_subscriber)
                             session = try_reconnect()
                             if session is None:
@@ -563,7 +564,9 @@ async def stop_camera_detection(config_id: int):
 
 def start_pipeline(stream, det: PTDetector, result_queue: queue.Queue, stop_event: threading.Event, camera_config=None):
     frame_queue = queue.Queue(maxsize=C.QUEUE_MAX)
-
+    if camera_config is not None and not isinstance(camera_config, dict):
+        camera_config = dict(camera_config)
+    
     def is_within_time_range():
         """判断当前时间是否在摄像头配置的时间范围内"""
         if not camera_config:
@@ -721,19 +724,20 @@ async def ws_endpoint(
         barn_id: Optional[int] = Query(None, description="Barn ID"),
 ):
     """
-    WebSocket 端点 - 多订阅者共享 pipeline 架构
+    WebSocket 端点 - 多订阅者共享 pipeline 架构 + 后台/展示结果分离
     
     新架构流程：
     1. 根据 kind+value+camera_id 生成唯一的 source_key
     2. 从 session_manager 获取或创建 SourceSession
     3. 将当前 WebSocket 注册为该 session 的订阅者
-    4. 接收 session 广播的检测结果
+    4. 等待 display_version 变化时发送已编码结果（避免重复编码和发送）
     5. 断开时自动取消订阅和释放资源
     
-    好处：
-    - 同一视频源只有一个 reader 和一个 infer 线程
-    - 多个连接共享检测结果，避免重复推理
-    - 线程数不再线性增长，资源利用率大幅提升
+    关键优化：
+    - 版本检查：只有当 display_version 变化时才发送
+    - 统一编码：多订阅者共享已编码的 JPEG
+    - 避免重复编码：每个新的展示帧只编码一次
+    - 后台模式：无前端时不生成展示帧和编码
     """
     await ws.accept()
     await ws_manager.register(ws)
@@ -785,30 +789,42 @@ async def ws_endpoint(
         print(f"{get_timestamp()} [WS] Registered as subscriber, session: {source_key}", flush=True)
 
         # 接收 session 的广播结果并发送给客户端
+        # 优化：版本检查机制，避免重复发送
         frame_count = 0
+        last_sent_display_version = -1  # 记录上次发送的版本
+        
         while True:
             try:
-                # 获取最新检测结果
-                frame = session.get_latest_result()
+                # 获取当前 display_version
+                current_display_version = session.get_display_version()
                 
-                if frame is None:
-                    # 等待第一帧可用
-                    await asyncio.sleep(0.05)
+                # 版本未变化，不需要发送，等待新帧
+                if current_display_version == last_sent_display_version:
+                    await asyncio.sleep(0.01)
                     continue
-
-                # 打印广播日志（每10帧打印一次）
-                if frame_count % 10 == 0:
-                    with session.subscribers_lock:
-                        print(f"{get_timestamp()} [BROADCAST] source_key={source_key} frame_id={frame_count} subscriber_count={len(session.subscribers)}", flush=True)
                 
-                # 异步发送帧数据给客户端
-                await ws_manager.send_frame(ws, frame)
+                # 版本变化，有新的展示帧，进行发送
+                # 注意：send_frame 会调用 session.encode_and_cache_jpeg() 进行统一编码
+                try:
+                    await ws_manager.send_frame(ws, None, session=session)
+                    last_sent_display_version = current_display_version
+                    
+                    # 打印发送日志（每10帧打印一次）
+                    frame_count += 1
+                    if frame_count % 10 == 0:
+                        ws_count = session.get_ws_subscriber_count()
+                        print(f"{get_timestamp()} [SEND] source_key={source_key} ws_id={id(ws)} "
+                              f"frame_id={frame_count} display_version={current_display_version} "
+                              f"total_subscribers={ws_count}", flush=True)
                 
-                # 打印发送日志（每10帧打印一次）
-                if frame_count % 10 == 0:
-                    print(f"{get_timestamp()} [SEND] source_key={source_key} ws_id={id(ws)} frame_id={frame_count}", flush=True)
+                except RuntimeError as e:
+                    # WebSocket 已断开
+                    if "WebSocket send failed" in str(e):
+                        break
+                    raise
                 
-                frame_count += 1
+                # 短暂等待避免过快
+                await asyncio.sleep(0.001)
 
             except asyncio.CancelledError:
                 break
@@ -829,7 +845,8 @@ async def ws_endpoint(
         if session and source_key:
             try:
                 session.remove_subscriber(ws)
-                print(f"{get_timestamp()} [WS] Unregistered from session: {source_key}", flush=True)
+                print(f"{get_timestamp()} [WS] Unregistered from session: {source_key}, "
+                      f"remaining_subscribers={session.get_ws_subscriber_count()}", flush=True)
             except Exception as e:
                 print(f"{get_timestamp()} [WS] Error unregistering from session: {e}", flush=True)
 

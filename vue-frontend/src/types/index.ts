@@ -62,5 +62,6 @@ export interface CameraConfig {
   start_time: string;
   end_time: string;
   status: number;
+  enable: number;
   created_at?: string;
 }

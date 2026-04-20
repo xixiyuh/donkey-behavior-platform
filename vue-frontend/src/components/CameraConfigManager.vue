@@ -75,6 +75,7 @@
             <th>栏</th>
             <th>检测时间</th>
             <th>状态</th>
+            <th>启用</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -87,7 +88,11 @@
             <td>{{ camera.pen_id }}</td>
             <td>{{ camera.start_time }} - {{ camera.end_time }}</td>
             <td>{{ getStatusText(camera.status) }}</td>
+            <td>{{ camera.enable ? '是' : '否' }}</td>
             <td>
+              <button @click="toggleEnable(camera.id, camera.enable)" style="margin-right: 10px;">
+                {{ camera.enable ? '禁用' : '启用' }}
+              </button>
               <select v-model.number="camera.status" @change="updateCameraStatus(camera.id, camera.status)" style="margin-right: 10px;">
                 <option :value="1">启用</option>
                 <option :value="2">自动</option>
@@ -97,7 +102,7 @@
             </td>
           </tr>
           <tr v-if="(cameraConfigs || []).length === 0">
-            <td colspan="8" style="text-align: center;">暂无摄像头配置</td>
+            <td colspan="9" style="text-align: center;">暂无摄像头配置</td>
           </tr>
         </tbody>
       </table>
@@ -314,6 +319,20 @@ const updateCameraStatus = async (id: number, status: any) => {
   } catch (err: any) {
     console.error('Error updating camera config status:', err);
     alert('更新摄像头状态失败: ' + (err.response?.data?.detail || err.message));
+  }
+};
+
+// 切换启用状态
+const toggleEnable = async (id: number, currentEnable: number) => {
+  try {
+    const newEnable = currentEnable ? 0 : 1;
+    await cameraStore.setCameraConfigEnable(id, newEnable);
+
+    // 加载更新后的配置
+    await loadCameraConfigs();
+  } catch (err: any) {
+    console.error('Error updating camera config enable:', err);
+    alert('更新摄像头启用状态失败: ' + (err.response?.data?.detail || err.message));
   }
 };
 

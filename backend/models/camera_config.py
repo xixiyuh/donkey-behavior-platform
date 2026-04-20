@@ -31,8 +31,24 @@ class CameraConfig:
         configs = cursor.fetchall()
         conn.close()
         
+        # 将元组转换为字典
+        config_dicts = []
+        for config in configs:
+            config_dicts.append({
+                'id': config[0],
+                'camera_id': config[1],
+                'flv_url': config[2],
+                'barn_id': config[3],
+                'pen_id': config[4],
+                'start_time': config[5],
+                'end_time': config[6],
+                'created_at': config[7],
+                'enable': config[8],
+                'status': config[9]
+            })
+        
         return {
-            'items': configs,
+            'items': config_dicts,
             'total': total,
             'page': page,
             'page_size': page_size
@@ -56,17 +72,39 @@ class CameraConfig:
         current_time = datetime.now().time()
         
         for config in all_configs:
-            status = config['status']
+            status = config[9]  # status is at index 9
             
             # 启用状态，直接加入
             if status == 1:
-                active_configs.append(config)
+                active_configs.append({
+                    'id': config[0],
+                    'camera_id': config[1],
+                    'flv_url': config[2],
+                    'barn_id': config[3],
+                    'pen_id': config[4],
+                    'start_time': config[5],
+                    'end_time': config[6],
+                    'created_at': config[7],
+                    'enable': config[8],
+                    'status': config[9]
+                })
             # 自动状态，根据时间判断
             elif status == 2:
-                start_time = datetime.strptime(config['start_time'], '%H:%M').time()
-                end_time = datetime.strptime(config['end_time'], '%H:%M').time()
+                start_time = datetime.strptime(config[5], '%H:%M').time()  # start_time at index 5
+                end_time = datetime.strptime(config[6], '%H:%M').time()    # end_time at index 6
                 if start_time <= current_time <= end_time:
-                    active_configs.append(config)
+                    active_configs.append({
+                        'id': config[0],
+                        'camera_id': config[1],
+                        'flv_url': config[2],
+                        'barn_id': config[3],
+                        'pen_id': config[4],
+                        'start_time': config[5],
+                        'end_time': config[6],
+                        'created_at': config[7],
+                        'enable': config[8],
+                        'status': config[9]
+                    })
             # 禁用状态，跳过
             else:
                 continue
@@ -86,13 +124,38 @@ class CameraConfig:
         conn.close()
     
     @staticmethod
+    def set_enable(id, enable):
+        """
+        设置摄像头配置的启用状态
+        enable: 0=禁用, 1=启用
+        """
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE camera_configs SET enable = ? WHERE id = ?', (enable, id))
+        conn.commit()
+        conn.close()
+    
+    @staticmethod
     def get_by_id(id):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM camera_configs WHERE id = ?', (id,))
         config = cursor.fetchone()
         conn.close()
-        return config
+        if config:
+            return {
+                'id': config[0],
+                'camera_id': config[1],
+                'flv_url': config[2],
+                'barn_id': config[3],
+                'pen_id': config[4],
+                'start_time': config[5],
+                'end_time': config[6],
+                'created_at': config[7],
+                'enable': config[8],
+                'status': config[9]
+            }
+        return None
     
     @staticmethod
     def delete(id):

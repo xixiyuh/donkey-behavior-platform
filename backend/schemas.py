@@ -85,6 +85,7 @@ class CameraConfigBase(BaseModel):
     start_time: str = '09:00'
     end_time: str = '19:00'
     status: int = 1
+    enable: int = 1
 
 class CameraConfigCreate(CameraConfigBase):
     pass

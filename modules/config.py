@@ -11,6 +11,7 @@ IOU_THRES = 0.45
 
 # ------- 事件检测参数 -------
 MATING_EVENT_MIN_DURATION = 6
+MATING_EVENT_MAX_DURATION = 25  # mating事件最大持续时间阈值（秒），超过此时间的事件不会被记录
 MATING_CONF_THRES = 0.4
 MATING_AVG_CONF_THRES = 0.8  # mating事件平均置信度阈值，只有超过此阈值的事件才会被记录
 MATING_MAX_CONF_THRES = 0.9  # mating事件最高置信度阈值，只有超过此阈值的事件才会被记录
@@ -36,9 +37,10 @@ PT_MODEL_PATH = str(BASE_DIR / "models" / "0710-best-YOLO.pt")
 
 # ------- 本地流水线 / WS -------
 MAX_FPS = 12
-FRAME_INTERVAL = 4      #每 FRAME_INTERVAL 帧进行一次检测
+FRAME_INTERVAL = 4     # 表示每4帧都做检测（帧级跳帧）
+INFER_INTERVAL_MS = 300  # 推理最小间隔时间（毫秒），控制每秒推理次数：1000/333≈3次/秒。设置为0表示无限制
 JPEG_QUALITY = 60
-QUEUE_MAX = 2
+QUEUE_MAX = 10      # JPEG质量，值越高质量越好（0-100)但是消耗资源变大，不推荐（无需很好画质）
 
 # ------- 输入源默认 -------
 RTSP_URL = "rtsp://user:pass@ip:port/xxx"

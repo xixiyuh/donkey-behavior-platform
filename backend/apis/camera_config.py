@@ -67,6 +67,7 @@ def get_camera_configs(page: int = 1, page_size: int = 10):
             "start_time": config["start_time"],
             "end_time": config["end_time"],
             "status": config["status"],
+            "enable": config["enable"],
             "created_at": config["created_at"]
         } for config in result['items']],
         "total": result['total'],
@@ -74,30 +75,65 @@ def get_camera_configs(page: int = 1, page_size: int = 10):
         "page_size": result['page_size']
     }
 
-@router.patch("/{config_id}/status")
-def set_camera_config_status(config_id: int, status_data: dict = Body(...)):
-    # 验证状态值
-    status = status_data.get("status")
-    if status not in [0, 1, 2]:
-        raise HTTPException(status_code=400, detail="Invalid status. Must be 0 (disabled), 1 (enabled), or 2 (auto)")
+@router.patch("/{config_id}/enable")
+def set_camera_config_enable(config_id: int, enable_data: dict = Body(...)):
+    # 验证enable值
+    enable = enable_data.get("enable")
+    if enable not in [0, 1]:
+        raise HTTPException(status_code=400, detail="Invalid enable value. Must be 0 (disabled) or 1 (enabled)")
     
     # 先获取当前配置
     current_config = CameraConfig.get_by_id(config_id)
     if not current_config:
         raise HTTPException(status_code=404, detail="Camera config not found")
     
-    # 设置状态
+    # 设置enable状态
+    CameraConfig.set_enable(config_id, enable)
+    
+    # 获取更新后的配置
+    updated_config = CameraConfig.get_by_id(config_id)
+    if updated_config:
+        if enable == 1:  # 启用
+            # 检查是否应该启动检测
+            status = updated_config['status']
+            if status == 1:  # 启用状态
+                if start_camera_detection:
+                    start_camera_detection(updated_config)
+            elif status == 2:  # 自动状态，根据时间判断
+                from datetime import datetime
+                current_time = datetime.now().time()
+                start_time = datetime.strptime(updated_config['start_time'], '%H:%M').time()
+                end_time = datetime.strptime(updated_config['end_time'], '%H:%M').time()
+                if start_time <= current_time <= end_time:
+                    if start_camera_detection:
+                        start_camera_detection(updated_config)
+        elif enable == 0:  # 禁用
+            if stop_camera_detection:
+                stop_camera_detection(config_id)
+    
+    return {"message": "Camera config enable status updated successfully"}
+
+@router.patch("/{config_id}/status")
+def set_camera_config_status(config_id: int, status_data: dict = Body(...)):
+    # 验证status值
+    status = status_data.get("status")
+    if status not in [0, 1, 2]:
+        raise HTTPException(status_code=400, detail="Invalid status value. Must be 0 (disabled), 1 (enabled), or 2 (auto)")
+    
+    # 先获取当前配置
+    current_config = CameraConfig.get_by_id(config_id)
+    if not current_config:
+        raise HTTPException(status_code=404, detail="Camera config not found")
+    
+    # 设置status状态
     CameraConfig.set_status(config_id, status)
     
     # 获取更新后的配置
     updated_config = CameraConfig.get_by_id(config_id)
     if updated_config:
-        if status == 1:  # 启用状态，启动检测
+        if status == 1:  # 启用状态
             if start_camera_detection:
                 start_camera_detection(updated_config)
-        elif status == 0:  # 禁用状态，停止检测
-            if stop_camera_detection:
-                stop_camera_detection(config_id)
         elif status == 2:  # 自动状态，根据时间判断
             from datetime import datetime
             current_time = datetime.now().time()
@@ -106,9 +142,9 @@ def set_camera_config_status(config_id: int, status_data: dict = Body(...)):
             if start_time <= current_time <= end_time:
                 if start_camera_detection:
                     start_camera_detection(updated_config)
-            else:
-                if stop_camera_detection:
-                    stop_camera_detection(config_id)
+        elif status == 0:  # 禁用状态
+            if stop_camera_detection:
+                stop_camera_detection(config_id)
     
     return {"message": "Camera config status updated successfully"}
 
