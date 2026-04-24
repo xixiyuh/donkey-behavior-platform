@@ -327,7 +327,9 @@ const startWithFile = (filePath: string) => {
 
   log(`正在连接: ${kind.value} - ${filePath}`, 'info');
   isLoading.value = true;
-  connect(kind.value, filePath, 'local-file', selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
+  // 关键修复：file/video/image 类型不传 camera_id，否则会复用旧的 session！！！
+  // 让每个文件都创建自己独立的 session！
+  connect(kind.value, filePath, undefined, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
   // 假设连接成功后会设置isConnected为true,我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {
@@ -344,11 +346,11 @@ const start = () => {
   // 如果选择了摄像头,则使用摄像头的FLV地址
   if (selectedCamera.value) {
     value = selectedCamera.value;
-    
+
     // 从摄像头列表中找到对应的camera对象,获取真实的camera_id
     const selectedCameraObj = cameras.value.find(cam => cam.flv_url === value);
     cameraId = selectedCameraObj?.camera_id || value; // 优先使用真实camera_id,否则使用URL
-    
+
     kind.value = 'flv'; // 使用FLV格式，与后台检测共享同一套pipeline
     log(`使用摄像头地址: ${value}`, 'info');
     log(`使用摄像头ID: ${cameraId}`, 'info');
@@ -384,21 +386,8 @@ const stop = async () => {
   isLoading.value = false;
   log('已停止连接', 'info');
 
-  // 等待后端释放文件资源
-  await new Promise(resolve => setTimeout(resolve, 5000));
-
-  // 删除上传的文件
-  if (currentFileName.value) {
-    log(`正在删除上传的文件: ${currentFileName.value}`, 'info');
-    const result = await deleteFile(currentFileName.value);
-    if (result.success) {
-      log(`文件删除成功: ${result.message}`, 'success');
-    } else {
-      log(`文件删除失败: ${result.message}`, 'error');
-    }
-    // 清空当前文件名
-    currentFileName.value = '';
-  }
+  // 清空当前文件名，不再立即删除文件（文件会在每天固定时间统一清理）
+  currentFileName.value = '';
 
   // 清空文件输入框,允许再次选择同一文件
   if (fileInputRef.value) {

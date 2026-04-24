@@ -91,12 +91,21 @@ async def lifespan(app: FastAPI):
             id='stop_detection',
             replace_existing=True
         )
+        # 每天凌晨清理上传文件
+        scheduler.add_job(
+            cleanup_uploaded_files,
+            CronTrigger(hour=C.UPLOAD_CLEANUP_HOUR, minute=C.UPLOAD_CLEANUP_MINUTE),
+            id='cleanup_uploads',
+            replace_existing=True
+        )
         scheduler.start()
         print(f"{get_timestamp()} Scheduler started successfully")
         
         # 立即启动所有启用的摄像头检测
         print(f"{get_timestamp()} Starting all enabled camera detections immediately...")
         start_all_detections()
+        # 立即执行一次清理（方便测试）
+        cleanup_uploaded_files()
     except Exception as e:
         print(f"{get_timestamp()} Warning: Failed to pre-load detector: {e}")
 
@@ -447,6 +456,40 @@ def stop_all_detections():
     """停止所有摄像头检测"""
     print(f"{get_timestamp()} [Scheduler] Stopping all detections")
     detection_manager.stop_all_detections()
+
+def cleanup_uploaded_files():
+    """清理上传的过期文件"""
+    print(f"{get_timestamp()} [Scheduler] Starting upload files cleanup")
+    
+    try:
+        upload_dir = C.BASE_DIR / "uploads"
+        if not upload_dir.exists():
+            print(f"{get_timestamp()} [Scheduler] Upload directory not found")
+            return
+        
+        current_time = time.time()
+        retention_seconds = C.UPLOAD_FILE_RETENTION_HOURS * 3600
+        deleted_count = 0
+        checked_count = 0
+        
+        for file_path in upload_dir.iterdir():
+            if file_path.is_file():
+                checked_count += 1
+                file_age = current_time - file_path.stat().st_mtime
+                file_age_hours = file_age / 3600
+                print(f"{get_timestamp()} [Scheduler] File: {file_path.name}, age: {file_age_hours:.1f}h, retention: {C.UPLOAD_FILE_RETENTION_HOURS}h", flush=True)
+                
+                if file_age > retention_seconds:
+                    try:
+                        file_path.unlink()
+                        deleted_count += 1
+                        print(f"{get_timestamp()} [Scheduler] Deleted expired file: {file_path.name}")
+                    except Exception as e:
+                        print(f"{get_timestamp()} [Scheduler] Error deleting file {file_path.name}: {e}")
+        
+        print(f"{get_timestamp()} [Scheduler] Upload cleanup completed. Checked: {checked_count}, Deleted: {deleted_count} files")
+    except Exception as e:
+        print(f"{get_timestamp()} [Scheduler] Error during upload cleanup: {e}")
 
 
 @app.get("/")

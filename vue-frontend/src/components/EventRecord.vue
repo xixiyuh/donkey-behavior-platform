@@ -8,7 +8,7 @@
         <select id="eventBarnId" v-model="selectedBarn" @change="handleBarnChange">
           <option value="">全部养殖舍</option>
           <option
-            v-for="barn in barnStore.allBarns"
+            v-for="barn in barnStore.allBarns || []"
             :key="barn.id"
             :value="String(barn.id)"
           >
@@ -85,7 +85,7 @@
             <td>{{ event.pen_id }}</td>
             <td>{{ getBarnName(event.barn_id) }}</td>
           </tr>
-          <tr v-if="eventStore.allEvents.length === 0">
+          <tr v-if="eventStore.allEvents && eventStore.allEvents.length === 0">
             <td colspan="7" style="text-align: center;">暂无事件数据</td>
           </tr>
         </tbody>

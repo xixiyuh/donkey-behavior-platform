@@ -5,6 +5,9 @@ pydantic
 pydantic-settings
 python-dotenv
 
+# 数据库
+pymysql
+
 # 图像处理和计算机视觉
 opencv-python-headless
 numpy

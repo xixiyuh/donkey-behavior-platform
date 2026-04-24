@@ -10,7 +10,7 @@ router = APIRouter(tags=["events"])
 def create_mating_event(event: MatingEventCreate):
     event_id = MatingEvent.create(
         event.camera_id, event.pen_id, event.barn_id, event.start_time, event.end_time,       
-        event.duration, event.avg_confidence, event.max_confidence,
+        event.duration, event.avg_confidence, event.max_confidence, event.movement,
         event.screenshot
     )
     created_event = MatingEvent.get_by_id(event_id)
@@ -26,6 +26,7 @@ def create_mating_event(event: MatingEventCreate):
         "duration": created_event["duration"], 
         "avg_confidence": created_event["avg_confidence"],
         "max_confidence": created_event["max_confidence"],
+        "movement": created_event["movement"],
         "screenshot": created_event["screenshot"],
         "created_at": created_event["created_at"]
     }

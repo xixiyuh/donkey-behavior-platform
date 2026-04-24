@@ -11,7 +11,7 @@
         >
           <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
           <option
-            v-for="barn in barnStore.allBarns"
+            v-for="barn in barnStore.allBarns || []"
             :key="barn.id"
             :value="barn.id"
           >
@@ -111,7 +111,7 @@
               </template>
             </td>
           </tr>
-          <tr v-if="filteredCameras.length === 0">
+          <tr v-if="filteredCameras && filteredCameras.length === 0">
             <td colspan="6" style="text-align: center;">暂无摄像头数据</td>
           </tr>
         </tbody>

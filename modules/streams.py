@@ -5,10 +5,16 @@ import time
 import subprocess
 import numpy as np
 import threading
+from datetime import datetime
 from typing import Optional
 
 from . import config as C
 from backend.database import get_db_connection
+
+
+def get_timestamp():
+    """获取当前时间戳字符串，格式: [YYYY-MM-DD HH:MM:SS]"""
+    return datetime.now().strftime('[%Y-%m-%d %H:%M:%S]')
 
 
 class CameraStream:
@@ -33,16 +39,43 @@ class CameraStream:
 
 class FileStream:
     def __init__(self, path: str):
+        self.path = path
         self.cap = cv2.VideoCapture(path)
+        self.frame_count = 0
+        self.has_ended = False
+        print(f"{get_timestamp()} [FileStream] Initialized for: {path}")
+        if self.cap.isOpened():
+            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = self.cap.get(cv2.CAP_PROP_FPS)
+            print(f"{get_timestamp()} [FileStream] Video info: {total_frames} frames, {fps} FPS, duration: {total_frames/fps:.1f}s")
+        else:
+            print(f"{get_timestamp()} [FileStream] WARNING: Failed to open video!")
 
     def read(self):
         if not self.cap.isOpened():
             return False, None
-        return self.cap.read()
+
+        if self.has_ended:
+            # 视频已结束，不再返回帧
+            return False, None
+
+        ret, frame = self.cap.read()
+        if ret:
+            self.frame_count += 1
+            # 每100帧打印一次日志
+            if self.frame_count % 100 == 0:
+                print(f"{get_timestamp()} [FileStream] Read frame #{self.frame_count}", flush=True)
+        else:
+            # 视频结束，标记并返回 False（不再循环）
+            print(f"{get_timestamp()} [FileStream] End of video at frame #{self.frame_count}, stream will stop", flush=True)
+            self.has_ended = True
+            return False, None
+        return ret, frame
 
     def release(self):
         try:
             self.cap.release()
+            print(f"{get_timestamp()} [FileStream] Released, total frames read: {self.frame_count}", flush=True)
         except Exception:
             pass
 

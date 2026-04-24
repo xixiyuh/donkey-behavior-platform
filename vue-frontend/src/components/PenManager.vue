@@ -12,7 +12,7 @@
         >
           <option value="" disabled selected style="color: #888;">请选择养殖舍</option>
           <option
-            v-for="barn in barnStore.allBarns"
+            v-for="barn in barnStore.allBarns || []"
             :key="barn.id"
             :value="barn.id"
           >
@@ -64,7 +64,7 @@
               <button @click="deletePen(pen.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="filteredPens.length === 0">
+          <tr v-if="filteredPens && filteredPens.length === 0">
             <td colspan="4" style="text-align: center;">暂无栏数据</td>
           </tr>
         </tbody>

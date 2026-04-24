@@ -30,7 +30,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="barn in barnStore.allBarns" :key="barn.id">
+          <tr v-for="barn in barnStore.allBarns || []" :key="barn.id">
             <td>{{ barn.id }}</td>
             <td>{{ barn.name }}</td>
             <td>{{ barn.total_pens }}</td>
@@ -39,7 +39,7 @@
               <button @click="deleteBarn(barn.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="barnStore.allBarns.length === 0">
+          <tr v-if="barnStore.allBarns && barnStore.allBarns.length === 0">
             <td colspan="4" style="text-align: center;">暂无养殖舍数据</td>
           </tr>
         </tbody>

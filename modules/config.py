@@ -48,8 +48,8 @@ VIDEO_PATH = str(BASE_DIR / "data" / "demo.mp4")
 IMAGE_PATH = str(BASE_DIR / "data" / "111.png")
 
 # ------- MPV Pipe -------
-MPV_DIR = "/usr/bin"
-MPV_EXE = "/opt/mpv/bin/mpv"
+MPV_DIR = r"D:\mpv\mpv-x86_64-20260104-git-a3350e2"  # ←改成你 mpv.exe 所在目录
+MPV_EXE = r"D:\mpv\mpv-x86_64-20260104-git-a3350e2\mpv.exe"
 
 MPV_PIPE_W = 800
 MPV_PIPE_H = 600
@@ -59,3 +59,8 @@ MPV_PIPE_FPS = 8
 COLOR_STANDING = (0, 255, 0)
 COLOR_MATING = (0, 0, 255)
 COLOR_LYING = (255, 0, 0)
+
+# ------- 文件清理配置 -------
+UPLOAD_CLEANUP_HOUR = 1  # 每天凌晨2点清理上传文件
+UPLOAD_CLEANUP_MINUTE = 36  # 清理执行时间（分钟）
+UPLOAD_FILE_RETENTION_HOURS = 0  # 文件保留24小时（超过这个时间的文件会被清理）

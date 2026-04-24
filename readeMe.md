@@ -15,7 +15,7 @@ http://127.0.0.1:8080/
 
 conda activate donkey_track
 e:
-cd E:\donkey\萤石云\realtime-detector\vue-frontend
+cd vue-frontend
 npm run dev
 http://localhost:5173/detection
 

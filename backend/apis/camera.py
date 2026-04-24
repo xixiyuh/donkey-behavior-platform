@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
-import sqlite3
+import pymysql
 from ..models import Camera
 from ..schemas import Camera as CameraSchema, CameraCreate, CameraUpdate
 
@@ -21,8 +21,8 @@ def create_camera(camera: CameraCreate):
             "flv_url": created_camera["flv_url"],
             "created_at": created_camera["created_at"]
         }
-    except sqlite3.IntegrityError as e:
-        if "UNIQUE constraint failed" in str(e):
+    except pymysql.IntegrityError as e:
+        if e.args[0] == 1062:
             raise HTTPException(status_code=400, detail=f"摄像头标识 '{camera.camera_id}' 已存在")
         raise HTTPException(status_code=400, detail="创建摄像头失败")
 

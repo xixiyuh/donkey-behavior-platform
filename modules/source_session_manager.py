@@ -50,11 +50,11 @@ def get_timestamp():
 
 @dataclass
 class SourceKey:
-    """视频源唯一标识：(kind, value, camera_id)
+    """视频源唯一标识符：(kind, value, camera_id)
     
     比较逻辑：
-    - 如果有 camera_id，则仅用 camera_id 来判断相等性（同一摄像头无论访问方式不同都视为同源）
-    - 如果没有 camera_id，则用 (kind, value) 来判断相等性
+    - 如果有 camera_id 且 kind 不是 file/video/image，则仅用 camera_id 来判断相等性（同一摄像头无论访问方式不同都视为同源）
+    - 否则（file/video/image 或没有 camera_id），用 (kind, value) 来判断相等性
     """
     kind: str
     value: str
@@ -63,8 +63,9 @@ class SourceKey:
     barn_id: Optional[int] = None
     
     def __hash__(self):
-        # 如果有 camera_id，优先使用 camera_id 作为唯一标识
-        if self.camera_id:
+        # 如果有 camera_id 且 kind 不是 file/video/image，则优先使用 camera_id 作为唯一标识符
+        kind_lower = self.kind.lower() if self.kind else ''
+        if self.camera_id and kind_lower not in ('file', 'video', 'image'):
             return hash(('camera_id', self.camera_id))
         return hash((self.kind, self.value))
     
@@ -72,17 +73,13 @@ class SourceKey:
         if not isinstance(other, SourceKey):
             return False
         
-        # 优先比较 camera_id（如果有的话）
-        # 这确保相同摄像头无论怎样访问（前端 mpv / 后台 flv）都被认为是同一源
-        if self.camera_id and other.camera_id:
+        kind_lower = self.kind.lower() if self.kind else ''
+        # 如果有 camera_id 且 kind 不是 file/video/image，则只比较 camera_id
+        if self.camera_id and other.camera_id and kind_lower not in ('file', 'video', 'image'):
             return self.camera_id == other.camera_id
         
-        # 都没有 camera_id 时，才比较 kind 和 value
-        if not self.camera_id and not other.camera_id:
-            return self.kind == other.kind and self.value == other.value
-        
-        # 一个有 camera_id 一个没有，不相等
-        return False
+        # 否则，比较 kind 和 value（file/video/image 类型总是用这种方式）
+        return self.kind == other.kind and self.value == other.value
     
     def __repr__(self):
         cam_suffix = f"@{self.camera_id}" if self.camera_id else ""

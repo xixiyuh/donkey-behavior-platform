@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-import sqlite3
+import pymysql
 from ..models import Barn
 from ..schemas import Barn as BarnSchema, BarnCreate, BarnUpdate
 
@@ -18,8 +18,8 @@ def create_barn(barn: BarnCreate):
             "total_pens": created_barn["total_pens"],
             "created_at": created_barn["created_at"]
         }
-    except sqlite3.IntegrityError as e:
-        if "UNIQUE constraint failed" in str(e):
+    except pymysql.IntegrityError as e:
+        if e.args[0] == 1062:
             raise HTTPException(status_code=400, detail=f"养殖舍名称 '{barn.name}' 已存在")
         raise HTTPException(status_code=400, detail="创建养殖舍失败")
 

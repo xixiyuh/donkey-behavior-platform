@@ -65,6 +65,7 @@ class MatingEventBase(BaseModel):
     duration: int
     avg_confidence: float
     max_confidence: float
+    movement: float
     screenshot: Optional[str] = None
 
 class MatingEventCreate(MatingEventBase):

@@ -52,7 +52,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="barn in barnStore.allBarns" :key="barn.id">
+          <tr v-for="barn in barnStore.allBarns || []" :key="barn.id">
             <td>{{ barn.id }}</td>
             <td>{{ barn.name }}</td>
             <td>{{ barn.total_pens }}</td>
@@ -61,7 +61,7 @@
               <button @click="deleteBarn(barn.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="barnStore.allBarns.length === 0">
+          <tr v-if="barnStore.allBarns && barnStore.allBarns.length === 0">
             <td colspan="4" style="text-align: center;">暂无养殖舍数据</td>
           </tr>
         </tbody>
@@ -176,7 +176,7 @@ const saveEdit = async () => {
 
   try {
     // 检查名称是否与其他养殖舍重复
-    const otherBarns = barnStore.allBarns.filter(b => b.id !== editingBarn.value!.id);
+    const otherBarns = (barnStore.allBarns || []).filter(b => b.id !== editingBarn.value!.id);
     const nameExists = otherBarns.some(b => b.name === editForm.value.name);
 
     if (nameExists) {
