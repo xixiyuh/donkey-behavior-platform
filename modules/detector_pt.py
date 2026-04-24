@@ -1,5 +1,6 @@
 # modules/detector_pt.py
 import time
+import torch
 import numpy as np
 from ultralytics import YOLO
 from datetime import datetime
@@ -8,6 +9,14 @@ from .mating_detector import MatingDetector
 class PTDetector:
     def __init__(self, model_path: str):
         self.model = YOLO(model_path)
+        
+        # GPU 加速：如果有 CUDA GPU 则使用 GPU 推理
+        if torch.cuda.is_available():
+            self.model.to('cuda')
+            print(f"[PTDetector] GPU enabled: {torch.cuda.get_device_name(0)}")
+        else:
+            print("[PTDetector] GPU not available, using CPU")
+        
         self.mating_detector = MatingDetector()
 
     def infer_once(self, frame_bgr: np.ndarray):
