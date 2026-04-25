@@ -97,7 +97,6 @@
                 ref="flvInputRef"
                 v-model="editingFlvUrl"
                 style="width: 100%; padding: 5px; border-radius: 5px; border: 1px solid #334; background: #172045; color: #e7e9ee;"
-                @mounted="focusInput"
               />
             </td>
             <td>
@@ -133,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
@@ -158,7 +157,7 @@ const cameraForm = ref({
 // 编辑相关变量
 const editingCameraId = ref<number | null>(null);
 const editingFlvUrl = ref('');
-const flvInputRef = ref<HTMLInputElement | null>(null);
+const flvInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null);
 
 // 计算总页数
 const totalPages = computed(() => {
@@ -280,17 +279,22 @@ const startEdit = (camera: Camera) => {
   editingCameraId.value = camera.id;
   editingFlvUrl.value = camera.flv_url;
   // 延迟聚焦到输入框，确保DOM已经更新
-  setTimeout(() => {
+  nextTick(() => {
     focusInput();
-  }, 100);
+  });
 };
 
 // 聚焦到输入框并将光标移到最后
 const focusInput = () => {
-  if (flvInputRef.value) {
-    flvInputRef.value.focus();
-    const length = flvInputRef.value.value.length;
-    flvInputRef.value.setSelectionRange(length, length);
+  const input = Array.isArray(flvInputRef.value) ? flvInputRef.value[0] : flvInputRef.value;
+  if (!input || typeof input.focus !== 'function') {
+    return;
+  }
+
+  input.focus();
+  const length = input.value.length;
+  if (typeof input.setSelectionRange === 'function') {
+    input.setSelectionRange(length, length);
   }
 };
 

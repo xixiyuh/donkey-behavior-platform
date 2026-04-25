@@ -169,74 +169,91 @@ class MatingDetector:
         for d in detections:
             print(f"[DETECTION]   - {d['class']} (conf: {d['confidence']:.2f}, track_id: {d.get('track_id')})")
         
-        # 过滤出mating类型的检测结果
+        # 过滤出standing类型的检测结果
         mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
         print(f"[DETECTION] Filtered mating detections: {len(mating_detections)} (confidence threshold: {MATING_CONF_THRES})")
         
-        # 检查是否有mating事件
+        # 检查是否有standing事件
+        # Create or update mating events when matching detections exist
         if mating_detections:
-            # 为每个mating检测结果创建或更新事件
+            # 为每个standing检测结果创建或更新事件
+            # Process each mating detection independently
             for detection in mating_detections:
-                # 使用track_id来区分不同的mating事件
+                # 使用track_id来区分不同的standing事件，如果没有track_id则使用时间戳
                 track_id = detection.get('track_id')
                 print(f"Processing detection with track_id: {track_id}")
+                
+                # 构建事件键，包含track_id以区分不同的standing事件
+                # 如果没有track_id，使用检测框位置作为临时标识
+                # Build an event key so separate tracks become separate events
+                camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id and camera_id != "-1" else 'local'
+                
                 if track_id is not None:
-                    # 构建事件键，包含track_id以区分不同的mating事件
-                    # 优化事件键，使用简洁的标识符
-                    camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id and camera_id != "-1" else 'local'
                     event_key = f"{camera_key}_{pen_id}_{barn_id}_{track_id}"
-                    print(f"Event key: {event_key}")
+                else:
+                    # 使用检测框位置作为临时标识符
+                    x1, y1, x2, y2 = detection['bbox']
+                    # 使用中心点区域作为标识（简化为网格区域）
+                    grid_x = int((x1 + x2) / 2 / 100)  # 100像素为一个网格
+                    grid_y = int((y1 + y2) / 2 / 100)
+                    event_key = f"{camera_key}_{pen_id}_{barn_id}_grid{grid_x}_{grid_y}"
+                
+                print(f"Event key: {event_key}")
+                
+                if event_key not in self.current_mating_events:
+                    # Start a new mating event
+                    # 开始新的standing事件
+                    print(f"Starting new event: {event_key}")
+                    # 计算中心点
+                    x1, y1, x2, y2 = detection['bbox']
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    self.current_mating_events[event_key] = {
+                        'start_time': datetime.now(),
+                        'detections': [detection],
+                        'screenshots': [],
+                        'camera_id': camera_id,
+                        'pen_id': pen_id,
+                        'barn_id': barn_id,
+                        'last_detection_time': datetime.now(),  # 记录最后检测时间
+                        'max_confidence': detection['confidence'],
+                        'centers': [(center_x, center_y)]  # 记录中心点
+                    }
                     
-                    if event_key not in self.current_mating_events:
-                        # 开始新的mating事件
-                        print(f"Starting new event: {event_key}")
-                        # 计算中心点
-                        x1, y1, x2, y2 = detection['bbox']
-                        center_x = (x1 + x2) / 2
-                        center_y = (y1 + y2) / 2
-                        self.current_mating_events[event_key] = {
-                            'start_time': datetime.now(),
-                            'detections': [detection],
-                            'screenshots': [],
-                            'camera_id': camera_id,
-                            'pen_id': pen_id,
-                            'barn_id': barn_id,
-                            'last_detection_time': datetime.now(),  # 记录最后检测时间
-                            'max_confidence': detection['confidence'],
-                            'centers': [(center_x, center_y)]  # 记录中心点
-                        }
-                        
-                        # 保存第一张截图
+                    # 保存第一张截图
+                    self.save_screenshot(frame, detection, event_key, 0)
+                    
+                else:
+                    # Update the existing mating event
+                    # 更新现有的standing事件
+                    event = self.current_mating_events[event_key]
+                    event['detections'].append(detection)
+                    event['last_detection_time'] = datetime.now()  # 更新最后检测时间
+                    # 计算中心点并记录
+                    x1, y1, x2, y2 = detection['bbox']
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    event['centers'].append((center_x, center_y))
+                    print(f"Updating event: {event_key}, detection count: {len(event['detections'])}")
+                    
+                    # 只保存置信度最高的截图（只保存1张）
+                    if detection['confidence'] > event['max_confidence']:
+                        # 更新最高置信度
+                        event['max_confidence'] = detection['confidence']
+                        # 保存新的截图，替换旧的
                         self.save_screenshot(frame, detection, event_key, 0)
-                        
-                    else:
-                        # 更新现有的mating事件
-                        event = self.current_mating_events[event_key]
-                        event['detections'].append(detection)
-                        event['last_detection_time'] = datetime.now()  # 更新最后检测时间
-                        # 计算中心点并记录
-                        x1, y1, x2, y2 = detection['bbox']
-                        center_x = (x1 + x2) / 2
-                        center_y = (y1 + y2) / 2
-                        event['centers'].append((center_x, center_y))
-                        print(f"Updating event: {event_key}, detection count: {len(event['detections'])}")
-                        
-                        # 只保存置信度最高的截图（只保存1张）
-                        if detection['confidence'] > event['max_confidence']:
-                            # 更新最高置信度
-                            event['max_confidence'] = detection['confidence']
-                            # 保存新的截图，替换旧的
-                            self.save_screenshot(frame, detection, event_key, 0)
         else:
-            # 没有mating检测结果，检查是否有正在进行的mating事件需要结束
+            # No mating detections in this frame; check whether stale events should end
+            # 没有standing检测结果，检查是否有正在进行的standing事件需要结束
             # 构建基础事件键前缀
             camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id else 'unknown'
             base_event_key = f"{camera_key}_{pen_id}_{barn_id}_"
-            # 找出所有以该前缀开头的事件键
+            # 找出所有以该前缀开头的事件键（包括grid开头的）
             event_keys_to_remove = []
             current_time = datetime.now()
             for event_key in self.current_mating_events:
-                if event_key.startswith(base_event_key):
+                # 检查是否以base_event_key开头，或者是grid格式的事件
+                if event_key.startswith(base_event_key) or event_key.startswith(f"{camera_key}_{pen_id}_{barn_id}_grid"):
                     event = self.current_mating_events[event_key]
                     # 检查最后检测时间，只有超过冷却期才结束事件
                     last_detection_time = event.get('last_detection_time', event['start_time'])
@@ -484,7 +501,7 @@ class MatingDetector:
             cursor.execute('''
             INSERT INTO mating_events (camera_id, pen_id, barn_id, start_time, end_time, duration, 
                                avg_confidence, max_confidence, movement, screenshot)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (event['camera_id'], pen_id, barn_id, 
                   event['start_time'], end_time, duration, avg_confidence, max_confidence, 
                   total_movement, screenshot))
@@ -516,3 +533,33 @@ class MatingDetector:
         
         for key in keys_to_remove:
             self.end_mating_event(key)
+    
+    def end_all_events(self, camera_key=None, pen_id=None, barn_id=None):
+        """
+        结束指定摄像头的所有事件
+        
+        Args:
+            camera_key: 摄像头键（可选）
+            pen_id: 栏ID（可选）
+            barn_id: 舍ID（可选）
+        """
+        if not self.current_mating_events:
+            return []
+        
+        event_keys_to_remove = []
+        for event_key in self.current_mating_events:
+            if camera_key is not None:
+                # 检查事件键是否匹配
+                prefix = f"{camera_key}_{pen_id}_{barn_id}_"
+                if event_key.startswith(prefix):
+                    event_keys_to_remove.append(event_key)
+            else:
+                # 结束所有事件
+                event_keys_to_remove.append(event_key)
+        
+        # 结束这些事件
+        print(f"Ending all events for camera {camera_key}: {event_keys_to_remove}")
+        for event_key in event_keys_to_remove:
+            self.end_mating_event(event_key)
+        
+        return event_keys_to_remove

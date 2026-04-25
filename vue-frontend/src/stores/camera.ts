@@ -136,7 +136,7 @@ export const useCameraStore = defineStore('camera', {
       }
     },
 
-    async updateCamera(cameraId: number, camera: { flv_url: string }) {
+    async updateCamera(cameraId: number, camera: Partial<Camera>) {
       this.loading = true;
       this.error = null;
       try {

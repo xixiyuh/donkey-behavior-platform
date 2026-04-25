@@ -6,6 +6,16 @@ from ultralytics import YOLO
 from datetime import datetime
 from .mating_detector import MatingDetector
 
+# 全局 MatingDetector 实例
+_global_mating_detector = None
+
+def get_mating_detector():
+    """获取全局 MatingDetector 实例"""
+    global _global_mating_detector
+    if _global_mating_detector is None:
+        _global_mating_detector = MatingDetector()
+    return _global_mating_detector
+
 class PTDetector:
     def __init__(self, model_path: str):
         self.model = YOLO(model_path)
@@ -17,7 +27,8 @@ class PTDetector:
         else:
             print("[PTDetector] GPU not available, using CPU")
         
-        self.mating_detector = MatingDetector()
+        # 使用全局的 MatingDetector 实例
+        self.mating_detector = get_mating_detector()
 
     def infer_once(self, frame_bgr: np.ndarray):
         t0 = time.time()

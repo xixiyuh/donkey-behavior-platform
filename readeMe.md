@@ -8,13 +8,10 @@ conda activate E:\Anaconda3\envs\donkey_track
 
 cmd:
 conda activate donkey_track
-e:
-cd E:\donkey\萤石云\realtime-detector
 uvicorn modules.main:app --host 127.0.0.1 --port 8080
 http://127.0.0.1:8080/
 
 conda activate donkey_track
-e:
 cd vue-frontend
 npm run dev
 http://localhost:5173/detection

@@ -34,6 +34,7 @@ from .source_session_manager import get_session_manager, SourceKey
 
 from backend.apis import router as farm_router, register_start_detection_func, register_stop_detection_func
 from backend.models import CameraConfig
+from backend.services import cleanup_expired_mating_events
 from backend.database import init_db
 
 def get_detector():
@@ -98,6 +99,15 @@ async def lifespan(app: FastAPI):
             id='cleanup_uploads',
             replace_existing=True
         )
+        scheduler.add_job(
+            cleanup_expired_events,
+            CronTrigger(
+                hour=getattr(C, "EVENT_RETENTION_CLEANUP_HOUR", 2),
+                minute=getattr(C, "EVENT_RETENTION_CLEANUP_MINUTE", 0)
+            ),
+            id='cleanup_expired_events',
+            replace_existing=True
+        )
         scheduler.start()
         print(f"{get_timestamp()} Scheduler started successfully")
         
@@ -106,6 +116,7 @@ async def lifespan(app: FastAPI):
         start_all_detections()
         # 立即执行一次清理（方便测试）
         cleanup_uploaded_files()
+        cleanup_expired_events()
     except Exception as e:
         print(f"{get_timestamp()} Warning: Failed to pre-load detector: {e}")
 
@@ -382,6 +393,17 @@ class CameraDetectionManager:
             finally:
                 print(f"{get_timestamp()} [Detection] Stopping detection for camera {config_id}")
                 
+                # 结束该摄像头的所有standing事件
+                try:
+                    from .detector_pt import get_mating_detector
+                    mating_detector = get_mating_detector()
+                    camera_key = camera_config.get('camera_id', 'unknown') if camera_config else 'unknown'
+                    pen_id = camera_config.get('pen_id', -1) if camera_config else -1
+                    barn_id = camera_config.get('barn_id', -1) if camera_config else -1
+                    mating_detector.end_all_events(camera_key=camera_key, pen_id=pen_id, barn_id=barn_id)
+                except Exception as e:
+                    print(f"{get_timestamp()} [Detection] Error ending events: {e}")
+                
                 # 取消注册订阅并释放资源
                 if session:
                     try:
@@ -490,6 +512,28 @@ def cleanup_uploaded_files():
         print(f"{get_timestamp()} [Scheduler] Upload cleanup completed. Checked: {checked_count}, Deleted: {deleted_count} files")
     except Exception as e:
         print(f"{get_timestamp()} [Scheduler] Error during upload cleanup: {e}")
+
+
+def cleanup_expired_events():
+    """Clean up expired mating events and their screenshots."""
+    print(f"{get_timestamp()} [Scheduler] Starting expired events cleanup")
+
+    try:
+        result = cleanup_expired_mating_events(
+            retention_months=getattr(C, "EVENT_RETENTION_MONTHS", 3)
+        )
+        print(
+            f"{get_timestamp()} [Scheduler] Expired events cleanup completed. "
+            f"Retention: {result['retention_months']} months, "
+            f"Matched: {result['expired_events']}, "
+            f"Deleted events: {result['deleted_events']}, "
+            f"Deleted files: {result['deleted_files']}, "
+            f"Missing files: {result['missing_files']}, "
+            f"Skipped files: {result['skipped_files']}, "
+            f"File errors: {result['file_errors']}"
+        )
+    except Exception as e:
+        print(f"{get_timestamp()} [Scheduler] Error during expired events cleanup: {e}")
 
 
 @app.get("/")

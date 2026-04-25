@@ -1,8 +1,7 @@
 <template>
   <div class="camera-config-manager">
-    <h2>摄像头检测配置</h2>
+    <h2>摄像头配置</h2>
 
-    <!-- 摄像头配置表单 -->
     <div class="form">
       <div class="form-row">
         <div class="form-group half">
@@ -15,15 +14,16 @@
           </select>
         </div>
         <div class="form-group half">
-          <label>栏</label>
+          <label>栏位</label>
           <select v-model="newCamera.pen_id" @change="handlePenChange">
-            <option value="" disabled selected style="color: #888;">请选择栏</option>
+            <option value="" disabled selected style="color: #888;">请选择栏位</option>
             <option v-for="pen in pens" :key="pen.id" :value="pen.id">
               第{{ pen.pen_number }}栏
             </option>
           </select>
         </div>
       </div>
+
       <div class="form-group">
         <label>摄像头</label>
         <select v-model="selectedCameraId" @change="handleCameraChange">
@@ -33,14 +33,17 @@
           </option>
         </select>
       </div>
+
       <div class="form-group">
         <label>摄像头ID</label>
         <input v-model="newCamera.camera_id" type="text" placeholder="摄像头ID" readonly>
       </div>
+
       <div class="form-group">
         <label>FLV地址</label>
         <input v-model="newCamera.flv_url" type="text" placeholder="FLV地址" readonly>
       </div>
+
       <div class="form-row">
         <div class="form-group half">
           <label>开始时间</label>
@@ -51,6 +54,7 @@
           <input v-model="newCamera.end_time" type="time" placeholder="结束时间">
         </div>
       </div>
+
       <div class="form-group">
         <label>状态</label>
         <select v-model="newCamera.status">
@@ -59,61 +63,77 @@
           <option value="0">禁用</option>
         </select>
       </div>
-      <button @click="addCamera">添加摄像头配置</button>
+
+      <button @click="addCamera">新增摄像头配置</button>
     </div>
 
-    <!-- 摄像头配置列表 -->
     <div class="camera-list">
       <h3>已配置摄像头</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>摄像头ID</th>
-            <th>FLV地址</th>
-            <th>养殖舍</th>
-            <th>栏</th>
-            <th>检测时间</th>
-            <th>状态</th>
-            <th>启用</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="camera in cameraConfigs" :key="camera.id">
-            <td>{{ camera.id }}</td>
-            <td>{{ camera.camera_id }}</td>
-            <td>{{ camera.flv_url }}</td>
-            <td>{{ getBarnName(camera.barn_id) }}</td>
-            <td>{{ camera.pen_id }}</td>
-            <td>{{ camera.start_time }} - {{ camera.end_time }}</td>
-            <td>{{ getStatusText(camera.status) }}</td>
-            <td>{{ camera.enable ? '是' : '否' }}</td>
-            <td>
-              <button @click="toggleEnable(camera.id, camera.enable)" style="margin-right: 10px;">
-                {{ camera.enable ? '禁用' : '启用' }}
-              </button>
-              <select v-model.number="camera.status" @change="updateCameraStatus(camera.id, camera.status)" style="margin-right: 10px;">
-                <option :value="1">启用</option>
-                <option :value="2">自动</option>
-                <option :value="0">禁用</option>
-              </select>
-              <button @click="deleteCamera(camera.id)">删除</button>
-            </td>
-          </tr>
-          <tr v-if="(cameraConfigs || []).length === 0">
-            <td colspan="9" style="text-align: center;">暂无摄像头配置</td>
-          </tr>
-        </tbody>
-      </table>
-      <!-- 分页控件 -->
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>摄像头ID</th>
+              <th>FLV地址</th>
+              <th>养殖舍</th>
+              <th>栏位</th>
+              <th>工作时间</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="camera in cameraConfigs" :key="camera.id">
+              <td>{{ camera.id }}</td>
+              <td>{{ camera.camera_id }}</td>
+              <td>{{ camera.flv_url }}</td>
+              <td>{{ getBarnName(camera.barn_id) }}</td>
+              <td>{{ camera.pen_id }}</td>
+              <td>{{ camera.start_time }} - {{ camera.end_time }}</td>
+              <td>{{ getModeText(camera) }}</td>
+              <td class="actions-cell">
+                <div class="mode-actions">
+                  <button
+                    class="mode-button"
+                    :class="{ active: getModeValue(camera) === 'auto' }"
+                    @click="setCameraMode(camera.id, 'auto')"
+                  >
+                    自动
+                  </button>
+                  <button
+                    class="mode-button"
+                    :class="{ active: getModeValue(camera) === 'enabled' }"
+                    @click="setCameraMode(camera.id, 'enabled')"
+                  >
+                    启用
+                  </button>
+                  <button
+                    class="mode-button"
+                    :class="{ active: getModeValue(camera) === 'disabled' }"
+                    @click="setCameraMode(camera.id, 'disabled')"
+                  >
+                    禁用
+                  </button>
+                </div>
+                <button class="delete-button" @click="deleteCamera(camera.id)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="cameraConfigs.length === 0">
+              <td colspan="8" style="text-align: center;">暂无摄像头配置</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="pagination">
         <button @click="changePage(1)" :disabled="currentPage === 1">首页</button>
         <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1">上一页</button>
         <span>{{ currentPage }} / {{ totalPages }}</span>
         <button @click="changePage(currentPage + 1)" :disabled="currentPage >= totalPages">下一页</button>
         <div class="page-jump">
-          <input type="number" v-model.number="jumpPage" min="1" :max="totalPages" style="width: 60px; margin: 0 10px;" />
+          <input type="number" v-model.number="jumpPage" min="1" :max="totalPages" style="width: 60px; margin: 0 10px;">
           <button @click="jumpToPage">跳转</button>
         </div>
         <span class="total-records">共 {{ cameraStore.configTotal }} 条记录</span>
@@ -123,11 +143,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
-import type { Barn, Pen, CameraConfig, Camera } from '../types';
+import type { Barn, Camera, CameraConfig, Pen } from '../types';
 
 const barnStore = useBarnStore();
 const penStore = usePenStore();
@@ -138,23 +158,9 @@ const jumpPage = ref(1);
 
 const barns = ref<Barn[]>([]);
 const pens = ref<Pen[]>([]);
-
-// 计算总页数
-const totalPages = computed(() => {
-  return Math.ceil(cameraStore.configTotal / 10);
-});
-
-// 跳转到指定页码
-const jumpToPage = async () => {
-  if (jumpPage.value < 1 || jumpPage.value > totalPages.value) {
-    alert('请输入有效的页码');
-    return;
-  }
-  currentPage.value = jumpPage.value;
-  await loadCameraConfigs(currentPage.value);
-};
 const allCameras = ref<Camera[]>([]);
 const cameraConfigs = ref<CameraConfig[]>([]);
+const selectedCameraId = ref('');
 
 const newCamera = ref({
   camera_id: '',
@@ -163,118 +169,122 @@ const newCamera = ref({
   pen_id: '',
   start_time: '09:00',
   end_time: '19:00',
-  status: 1
+  status: 1,
 });
 
-const selectedCameraId = ref('');
+const totalPages = computed(() => Math.max(1, Math.ceil(cameraStore.configTotal / 10)));
 
-// 筛选后的摄像头列表
 const filteredCameras = computed(() => {
   let result = allCameras.value;
-  console.log('Filtering cameras. Barn:', newCamera.value.barn_id, 'Pen:', newCamera.value.pen_id);
-  console.log('All cameras:', allCameras.value);
 
-  // 按养殖舍筛选
   if (newCamera.value.barn_id) {
-    const barnId = parseInt(newCamera.value.barn_id.toString());
-    console.log('Filtering by barn ID:', barnId);
-    result = result.filter(camera => camera.barn_id === barnId);
-    console.log('After barn filter:', result);
+    const barnId = Number(newCamera.value.barn_id);
+    result = result.filter((camera) => camera.barn_id === barnId);
   }
 
-  // 按栏筛选
   if (newCamera.value.pen_id) {
-    const penId = parseInt(newCamera.value.pen_id.toString());
-    console.log('Filtering by pen ID:', penId);
-    result = result.filter(camera => camera.pen_id === penId);
-    console.log('After pen filter:', result);
+    const penId = Number(newCamera.value.pen_id);
+    result = result.filter((camera) => camera.pen_id === penId);
   }
 
-  console.log('Final filtered cameras:', result);
   return result;
 });
 
-// 加载养殖舍列表
 const loadBarns = async () => {
-  try {
-    await barnStore.fetchBarns();
-    barns.value = barnStore.allBarns;
-  } catch (err) {
-    console.error('Error loading barns:', err);
-  }
+  await barnStore.fetchBarns();
+  barns.value = barnStore.allBarns;
 };
 
-// 加载栏列表
 const loadPens = async () => {
-  console.log('Loading pens for barn:', newCamera.value.barn_id);
-  console.log('Type of barn_id:', typeof newCamera.value.barn_id);
-
   if (!newCamera.value.barn_id) {
-    console.log('No barn selected');
     pens.value = [];
     newCamera.value.pen_id = '';
     return;
   }
 
-  try {
-    const barnId = parseInt(newCamera.value.barn_id.toString());
-    console.log('Parsed barn ID:', barnId);
-    console.log('Type of parsed barn ID:', typeof barnId);
-
-    // 从penStore中获取所有栏，然后本地筛选
-    await penStore.fetchPens();
-    const allPens = penStore.allPens;
-    console.log('All pens:', allPens);
-    const filteredPens = allPens.filter(pen => pen.barn_id === barnId);
-    console.log('Filtered pens for barn', barnId, ':', filteredPens);
-
-    pens.value = filteredPens;
-    // 不再重置pen_id，保持当前选择
-  } catch (err) {
-    console.error('Error loading pens:', err);
-    pens.value = [];
-    // 发生错误时才重置pen_id
-    newCamera.value.pen_id = '';
-  }
+  await penStore.fetchPens();
+  const barnId = Number(newCamera.value.barn_id);
+  pens.value = penStore.allPens.filter((pen) => pen.barn_id === barnId);
 };
 
-// 加载摄像头列表
 const loadCameras = async () => {
-  try {
-    await cameraStore.fetchCameras();
-    allCameras.value = cameraStore.allCameras;
-    console.log('Cameras loaded:', allCameras.value);
-  } catch (err) {
-    console.error('Error loading cameras:', err);
-    allCameras.value = [];
-  }
+  await cameraStore.fetchAllCameras();
+  allCameras.value = cameraStore.allCameras;
 };
 
-// 加载摄像头配置
-const loadCameraConfigs = async (page: number = 1) => {
-  try {
-    await cameraStore.fetchCameraConfigs(page);
-    cameraConfigs.value = cameraStore.allCameraConfigs;
-  } catch (err) {
-    console.error('Error loading camera configs:', err);
-  }
+const loadCameraConfigs = async (page = 1) => {
+  await cameraStore.fetchCameraConfigs(page);
+  cameraConfigs.value = cameraStore.allCameraConfigs;
 };
 
 const changePage = async (page: number) => {
-  if (page < 1) return;
+  if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
+  jumpPage.value = page;
   await loadCameraConfigs(page);
 };
 
-// 添加摄像头配置
+const jumpToPage = async () => {
+  if (jumpPage.value < 1 || jumpPage.value > totalPages.value) {
+    alert('请输入有效页码');
+    return;
+  }
+
+  currentPage.value = jumpPage.value;
+  await loadCameraConfigs(currentPage.value);
+};
+
+const getBarnName = (barnId: number): string => {
+  const barn = barns.value.find((item) => item.id === barnId);
+  return barn ? barn.name : String(barnId);
+};
+
+const getModeValue = (camera: CameraConfig): 'auto' | 'enabled' | 'disabled' => {
+  if (!camera.enable || camera.status === 0) {
+    return 'disabled';
+  }
+
+  if (camera.status === 2) {
+    return 'auto';
+  }
+
+  return 'enabled';
+};
+
+const getModeText = (camera: CameraConfig): string => {
+  const mode = getModeValue(camera);
+  if (mode === 'auto') return '自动';
+  if (mode === 'enabled') return '启用';
+  return '禁用';
+};
+
+const setCameraMode = async (id: number, mode: 'auto' | 'enabled' | 'disabled') => {
+  try {
+    if (mode === 'disabled') {
+      await cameraStore.setCameraConfigEnable(id, 0);
+      await cameraStore.setCameraConfigStatus(id, 0);
+    } else if (mode === 'enabled') {
+      await cameraStore.setCameraConfigEnable(id, 1);
+      await cameraStore.setCameraConfigStatus(id, 1);
+    } else {
+      await cameraStore.setCameraConfigEnable(id, 1);
+      await cameraStore.setCameraConfigStatus(id, 2);
+    }
+
+    await loadCameraConfigs(currentPage.value);
+  } catch (err: any) {
+    alert('更新摄像头模式失败: ' + (err.response?.data?.detail || err.message));
+  }
+};
+
 const addCamera = async () => {
   if (!newCamera.value.camera_id || !newCamera.value.flv_url) {
-    alert('请选择摄像头');
+    alert('请先选择摄像头');
     return;
   }
 
   if (!newCamera.value.barn_id || !newCamera.value.pen_id) {
-    alert('摄像头信息不完整，请重新选择摄像头');
+    alert('请选择养殖舍和栏位');
     return;
   }
 
@@ -282,14 +292,14 @@ const addCamera = async () => {
     await cameraStore.createCameraConfig({
       camera_id: newCamera.value.camera_id,
       flv_url: newCamera.value.flv_url,
-      barn_id: parseInt(newCamera.value.barn_id.toString()),
-      pen_id: parseInt(newCamera.value.pen_id.toString()),
+      barn_id: Number(newCamera.value.barn_id),
+      pen_id: Number(newCamera.value.pen_id),
       start_time: newCamera.value.start_time,
       end_time: newCamera.value.end_time,
-      status: parseInt(newCamera.value.status.toString())
+      status: Number(newCamera.value.status),
     });
-    await loadCameraConfigs();
-    // 重置表单
+
+    await loadCameraConfigs(currentPage.value);
     newCamera.value = {
       camera_id: '',
       flv_url: '',
@@ -297,140 +307,60 @@ const addCamera = async () => {
       pen_id: '',
       start_time: '09:00',
       end_time: '19:00',
-      status: 1
+      status: 1,
     };
     selectedCameraId.value = '';
     pens.value = [];
   } catch (err: any) {
-    console.error('Error adding camera config:', err);
-    alert('添加摄像头配置失败: ' + (err.response?.data?.detail || err.message));
+    alert('新增摄像头配置失败: ' + (err.response?.data?.detail || err.message));
   }
 };
 
-// 更新摄像头状态
-const updateCameraStatus = async (id: number, status: any) => {
-  try {
-        // 确保status是数字类型
-    const statusNum = parseInt(status.toString(), 10);
-    await cameraStore.setCameraConfigStatus(id, statusNum);
-
-    // 加载更新后的配置
-    await loadCameraConfigs();
-  } catch (err: any) {
-    console.error('Error updating camera config status:', err);
-    alert('更新摄像头状态失败: ' + (err.response?.data?.detail || err.message));
-  }
-};
-
-// 切换启用状态
-const toggleEnable = async (id: number, currentEnable: number) => {
-  try {
-    const newEnable = currentEnable ? 0 : 1;
-    await cameraStore.setCameraConfigEnable(id, newEnable);
-
-    // 加载更新后的配置
-    await loadCameraConfigs();
-  } catch (err: any) {
-    console.error('Error updating camera config enable:', err);
-    alert('更新摄像头启用状态失败: ' + (err.response?.data?.detail || err.message));
-  }
-};
-
-// 删除摄像头
 const deleteCamera = async (id: number) => {
-  if (!confirm('确定要删除这个摄像头配置吗？')) {
+  if (!confirm('确认删除这条摄像头配置吗？')) {
     return;
   }
 
   try {
-    // 找到该摄像头配置
-    const camera = cameraConfigs.value.find(c => c.id === id);
-    if (camera && camera.status === 1) {
-      // 如果启用，先禁用
-      await cameraStore.setCameraConfigStatus(id, 0);
-    }
-
-    // 删除摄像头配置
+    await cameraStore.setCameraConfigEnable(id, 0);
+    await cameraStore.setCameraConfigStatus(id, 0);
     await cameraStore.deleteCameraConfig(id);
-    await loadCameraConfigs();
+    await loadCameraConfigs(currentPage.value);
   } catch (err: any) {
-    console.error('Error deleting camera config:', err);
     alert('删除摄像头配置失败: ' + (err.response?.data?.detail || err.message));
   }
 };
 
-// 获取养殖舍名称
-const getBarnName = (barnId: number): string => {
-  if (!Array.isArray(barns.value)) {
-    return barnId.toString();
-  }
-  const barn = barns.value.find(b => b.id === barnId);
-  return barn ? barn.name : barnId.toString();
-};
-
-// 获取状态文本
-const getStatusText = (status: number): string => {
-  switch (status) {
-    case 0: return '禁用';
-    case 1: return '启用';
-    case 2: return '自动';
-    default: return '未知';
-  }
-};
-
-// 监听养殖舍变化，加载对应栏列表
 const handleBarnChange = async () => {
-  console.log('Barn changed:', newCamera.value.barn_id);
   await loadPens();
   selectedCameraId.value = '';
   newCamera.value.camera_id = '';
   newCamera.value.flv_url = '';
-  console.log('After loading pens, pens count:', (pens.value || []).length);
 };
 
-// 监听栏变化，重置摄像头选择
 const handlePenChange = () => {
   selectedCameraId.value = '';
   newCamera.value.camera_id = '';
   newCamera.value.flv_url = '';
 };
 
-// 监听摄像头变化，填充摄像头信息
 const handleCameraChange = async () => {
-  console.log('Camera changed:', selectedCameraId.value);
-  console.log('All cameras:', allCameras.value);
+  if (!selectedCameraId.value) return;
 
-  if (selectedCameraId.value) {
-    const cameraId = parseInt(selectedCameraId.value.toString());
-    console.log('Parsed camera ID:', cameraId);
+  const cameraId = Number(selectedCameraId.value);
+  const camera = allCameras.value.find((item) => item.id === cameraId);
+  if (!camera) return;
 
-    const camera = allCameras.value.find(c => c.id === cameraId);
-    console.log('Found camera:', camera);
-
-    if (camera) {
-      console.log('Filling camera info:', camera);
-      newCamera.value.camera_id = camera.camera_id;
-      newCamera.value.flv_url = camera.flv_url;
-      newCamera.value.barn_id = camera.barn_id.toString();
-
-      // 保存摄像头的pen_id
-      const cameraPenId = camera.pen_id.toString();
-
-      // 触发栏列表更新
-      console.log('Triggering pen list update for barn:', camera.barn_id);
-      await loadPens();
-
-      // 恢复摄像头的pen_id
-      newCamera.value.pen_id = cameraPenId;
-      console.log('After loading pens, pen_id:', newCamera.value.pen_id);
-    }
-  }
+  newCamera.value.camera_id = camera.camera_id;
+  newCamera.value.flv_url = camera.flv_url;
+  newCamera.value.barn_id = String(camera.barn_id);
+  await loadPens();
+  newCamera.value.pen_id = String(camera.pen_id);
 };
 
-// 组件挂载时加载数据
 onMounted(async () => {
   await loadBarns();
-  await penStore.fetchPens(); // 提前加载所有栏数据
+  await penStore.fetchPens();
   await loadCameras();
   await loadCameraConfigs(currentPage.value);
 });
@@ -470,7 +400,8 @@ label {
   margin: 8px 0 4px;
 }
 
-input, select {
+input,
+select {
   width: 100%;
   padding: 10px;
   border-radius: 10px;
@@ -502,20 +433,26 @@ button:disabled {
 
 .camera-list {
   margin-top: 20px;
+  min-width: 0;
 }
 
 .table-container {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   margin-top: 15px;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-th, td {
+th,
+td {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid #334;
@@ -527,49 +464,90 @@ th {
   color: #60a5fa;
 }
 
-th:nth-child(1), td:nth-child(1) {
+th:nth-child(1),
+td:nth-child(1) {
   width: 60px;
 }
 
-th:nth-child(2), td:nth-child(2) {
+th:nth-child(2),
+td:nth-child(2) {
   width: 100px;
 }
 
-th:nth-child(3), td:nth-child(3) {
+th:nth-child(3),
+td:nth-child(3) {
   width: 300px;
 }
 
-th:nth-child(4), td:nth-child(4) {
+th:nth-child(4),
+td:nth-child(4) {
   width: 100px;
 }
 
-th:nth-child(5), td:nth-child(5) {
+th:nth-child(5),
+td:nth-child(5) {
   width: 80px;
 }
 
-th:nth-child(6), td:nth-child(6) {
+th:nth-child(6),
+td:nth-child(6) {
   width: 150px;
 }
 
-th:nth-child(7), td:nth-child(7) {
-  width: 80px;
+th:nth-child(7),
+td:nth-child(7) {
+  width: 90px;
 }
 
-th:nth-child(8), td:nth-child(8) {
-  width: 120px;
+th:nth-child(8),
+td:nth-child(8) {
+  width: 260px;
 }
 
-/* 响应式设计 */
+.actions-cell {
+  white-space: normal;
+}
+
+.mode-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-button,
+.delete-button {
+  margin-top: 0;
+}
+
+.mode-button.active {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+.delete-button {
+  margin-top: 8px;
+}
+
 @media (max-width: 768px) {
   .form {
     padding: 10px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-group.half {
+    flex: 1 1 auto;
   }
 
   .table-container {
     font-size: 12px;
   }
 
-  th, td {
+  th,
+  td {
     padding: 6px 8px;
   }
 }

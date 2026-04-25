@@ -46,8 +46,11 @@ class CameraBase(BaseModel):
 class CameraCreate(CameraBase):
     pass
 
-class CameraUpdate(CameraBase):
-    pass
+class CameraUpdate(BaseModel):
+    camera_id: Optional[str] = None
+    pen_id: Optional[int] = None
+    barn_id: Optional[int] = None
+    flv_url: Optional[str] = None
 
 class Camera(CameraBase):
     id: int

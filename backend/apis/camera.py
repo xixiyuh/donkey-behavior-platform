@@ -62,7 +62,21 @@ def update_camera(camera_id: int, camera: CameraUpdate):
     existing_camera = Camera.get_by_id(camera_id)
     if not existing_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-    Camera.update(camera_id, camera.camera_id, camera.pen_id, camera.barn_id, camera.flv_url)
+
+    update_payload = {
+        "camera_id": camera.camera_id if camera.camera_id is not None else existing_camera["camera_id"],
+        "pen_id": camera.pen_id if camera.pen_id is not None else existing_camera["pen_id"],
+        "barn_id": camera.barn_id if camera.barn_id is not None else existing_camera["barn_id"],
+        "flv_url": camera.flv_url if camera.flv_url is not None else existing_camera["flv_url"],
+    }
+
+    Camera.update(
+        camera_id,
+        update_payload["camera_id"],
+        update_payload["pen_id"],
+        update_payload["barn_id"],
+        update_payload["flv_url"],
+    )
     updated_camera = Camera.get_by_id(camera_id)
     return {
         "id": updated_camera["id"],
