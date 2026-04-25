@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 from ..models import MatingEvent, Camera
 from ..schemas import MatingEvent as MatingEventSchema, MatingEventCreate
 
@@ -32,7 +32,7 @@ def create_mating_event(event: MatingEventCreate):
     }
 
 @router.get("/mating-events")
-def get_mating_events(page: int = 1, page_size: int = 10):
+def get_mating_events(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
     result = MatingEvent.get_all(page, page_size)
     return {
         "items": [{
@@ -54,7 +54,7 @@ def get_mating_events(page: int = 1, page_size: int = 10):
     }
 
 @router.get("/mating-events/{event_id}", response_model=MatingEventSchema)
-def get_mating_event(event_id: int):
+def get_mating_event(event_id: int = Path(..., ge=1)):
     event = MatingEvent.get_by_id(event_id)    
     if not event:
         raise HTTPException(status_code=404, detail="Mating event not found")
@@ -73,7 +73,11 @@ def get_mating_event(event_id: int):
     }
 
 @router.get("/pens/{pen_id}/mating-events")    
-def get_mating_events_by_pen(pen_id: int, page: int = 1, page_size: int = 10):
+def get_mating_events_by_pen(
+    pen_id: int = Path(..., ge=1),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+):
     result = MatingEvent.get_by_pen(pen_id, page, page_size)
     return {
         "items": [{
@@ -95,7 +99,11 @@ def get_mating_events_by_pen(pen_id: int, page: int = 1, page_size: int = 10):
     }
 
 @router.get("/barns/{barn_id}/mating-events")  
-def get_mating_events_by_barn(barn_id: int, page: int = 1, page_size: int = 10):
+def get_mating_events_by_barn(
+    barn_id: int = Path(..., ge=1),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+):
     result = MatingEvent.get_by_barn(barn_id, page, page_size)
     return {
         "items": [{
@@ -117,7 +125,11 @@ def get_mating_events_by_barn(barn_id: int, page: int = 1, page_size: int = 10):
     }
 
 @router.get("/cameras/{camera_id}/mating-events")
-def get_mating_events_by_camera(camera_id: int, page: int = 1, page_size: int = 10):
+def get_mating_events_by_camera(
+    camera_id: int = Path(..., ge=1),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+):
     camera = Camera.get_by_id(camera_id)
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")

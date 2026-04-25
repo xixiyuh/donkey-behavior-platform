@@ -2,12 +2,15 @@
 import pymysql
 from datetime import datetime
 
+from .config import settings
+
 MYSQL_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '123456',
-    'database': 'farm',
-    'charset': 'utf8mb4',
+    'host': settings.db_host,
+    'port': settings.db_port,
+    'user': settings.db_user,
+    'password': settings.db_password,
+    'database': settings.db_name,
+    'charset': settings.db_charset,
     'cursorclass': pymysql.cursors.DictCursor
 }
 
@@ -96,5 +99,3 @@ def init_db():
 
     conn.commit()
     conn.close()
-
-init_db()

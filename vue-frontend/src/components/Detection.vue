@@ -290,7 +290,7 @@ const handleFileSelect = (event: Event) => {
         log(`文件上传成功,路径: ${result.file_path}`, 'success');
 
         // 保存当前文件名,用于后续删除
-        currentFileName.value = file.name;
+        currentFileName.value = result.filename || result.file_path;
         log(`已记录文件名: ${file.name}`, 'info');
 
         // 根据文件类型设置kind

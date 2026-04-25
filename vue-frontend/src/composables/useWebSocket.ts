@@ -1,8 +1,7 @@
 import { ref, onUnmounted } from 'vue';
+import { WS_BASE_URL } from '../config';
 
 // 后端服务器地址
-const WS_BASE_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
-
 export function useWebSocket() {
   const ws = ref<WebSocket | null>(null);
   const isConnected = ref(false);

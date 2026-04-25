@@ -147,6 +147,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
+import { STREAM_URL_ERROR_MESSAGE, isValidStreamUrl, normalizeStreamUrl } from '../utils/streamUrl';
 import type { Barn, Camera, CameraConfig, Pen } from '../types';
 
 const barnStore = useBarnStore();
@@ -288,10 +289,16 @@ const addCamera = async () => {
     return;
   }
 
+  const flvUrl = normalizeStreamUrl(newCamera.value.flv_url);
+  if (!isValidStreamUrl(flvUrl)) {
+    alert(STREAM_URL_ERROR_MESSAGE);
+    return;
+  }
+
   try {
     await cameraStore.createCameraConfig({
       camera_id: newCamera.value.camera_id,
-      flv_url: newCamera.value.flv_url,
+      flv_url: flvUrl,
       barn_id: Number(newCamera.value.barn_id),
       pen_id: Number(newCamera.value.pen_id),
       start_time: newCamera.value.start_time,

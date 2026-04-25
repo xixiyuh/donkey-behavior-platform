@@ -1,6 +1,11 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Path, Query
 from ..models import CameraConfig
-from ..schemas import CameraConfig as CameraConfigSchema, CameraConfigCreate
+from ..schemas import (
+    CameraConfig as CameraConfigSchema,
+    CameraConfigCreate,
+    CameraConfigEnableUpdate,
+    CameraConfigStatusUpdate,
+)
 
 # 延迟导入启动和停止检测的函数
 start_camera_detection = None
@@ -55,7 +60,7 @@ def create_camera_config(config: CameraConfigCreate):
     }
 
 @router.get("")
-def get_camera_configs(page: int = 1, page_size: int = 10):
+def get_camera_configs(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
     result = CameraConfig.get_all(page, page_size)
     return {
         "items": [{
@@ -76,11 +81,9 @@ def get_camera_configs(page: int = 1, page_size: int = 10):
     }
 
 @router.patch("/{config_id}/enable")
-def set_camera_config_enable(config_id: int, enable_data: dict = Body(...)):
+def set_camera_config_enable(enable_data: CameraConfigEnableUpdate, config_id: int = Path(..., ge=1)):
     # 验证enable值
-    enable = enable_data.get("enable")
-    if enable not in [0, 1]:
-        raise HTTPException(status_code=400, detail="Invalid enable value. Must be 0 (disabled) or 1 (enabled)")
+    enable = enable_data.enable
     
     # 先获取当前配置
     current_config = CameraConfig.get_by_id(config_id)
@@ -114,11 +117,9 @@ def set_camera_config_enable(config_id: int, enable_data: dict = Body(...)):
     return {"message": "Camera config enable status updated successfully"}
 
 @router.patch("/{config_id}/status")
-def set_camera_config_status(config_id: int, status_data: dict = Body(...)):
+def set_camera_config_status(status_data: CameraConfigStatusUpdate, config_id: int = Path(..., ge=1)):
     # 验证status值
-    status = status_data.get("status")
-    if status not in [0, 1, 2]:
-        raise HTTPException(status_code=400, detail="Invalid status value. Must be 0 (disabled), 1 (enabled), or 2 (auto)")
+    status = status_data.status
     
     # 先获取当前配置
     current_config = CameraConfig.get_by_id(config_id)
@@ -149,6 +150,6 @@ def set_camera_config_status(config_id: int, status_data: dict = Body(...)):
     return {"message": "Camera config status updated successfully"}
 
 @router.delete("/{config_id}")
-def delete_camera_config(config_id: int):
+def delete_camera_config(config_id: int = Path(..., ge=1)):
     CameraConfig.delete(config_id)
     return {"message": "Camera config deleted successfully"}

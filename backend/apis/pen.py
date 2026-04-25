@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 from typing import List
 from ..models import Pen
 from ..schemas import Pen as PenSchema, PenCreate, PenUpdate
@@ -19,7 +19,7 @@ def create_pen(pen: PenCreate):
     }
 
 @router.get("")
-def get_pens(page: int = 1, page_size: int = 10):
+def get_pens(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
     result = Pen.get_all(page, page_size)
     return {
         "items": [{
@@ -34,7 +34,7 @@ def get_pens(page: int = 1, page_size: int = 10):
     }
 
 @router.get("/{pen_id}", response_model=PenSchema)
-def get_pen(pen_id: int):
+def get_pen(pen_id: int = Path(..., ge=1)):
     pen = Pen.get_by_id(pen_id)
     if not pen:
         raise HTTPException(status_code=404, detail="Pen not found")
@@ -46,7 +46,7 @@ def get_pen(pen_id: int):
     }
 
 @router.get("/barns/{barn_id}/pens", response_model=List[PenSchema])
-def get_pens_by_barn(barn_id: int):
+def get_pens_by_barn(barn_id: int = Path(..., ge=1)):
     pens = Pen.get_by_barn(barn_id)
     return [{
         "id": pen["id"],
@@ -56,7 +56,7 @@ def get_pens_by_barn(barn_id: int):
     } for pen in pens]
 
 @router.put("/{pen_id}", response_model=PenSchema)
-def update_pen(pen_id: int, pen: PenUpdate):
+def update_pen(pen: PenUpdate, pen_id: int = Path(..., ge=1)):
     existing_pen = Pen.get_by_id(pen_id)
     if not existing_pen:
         raise HTTPException(status_code=404, detail="Pen not found")
@@ -70,7 +70,7 @@ def update_pen(pen_id: int, pen: PenUpdate):
     }
 
 @router.delete("/{pen_id}")
-def delete_pen(pen_id: int):
+def delete_pen(pen_id: int = Path(..., ge=1)):
     existing_pen = Pen.get_by_id(pen_id)
     if not existing_pen:
         raise HTTPException(status_code=404, detail="Pen not found")

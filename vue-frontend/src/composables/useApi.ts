@@ -1,9 +1,8 @@
 import axios from 'axios';
 import type { UploadResponse } from '../types';
+import { API_BASE_URL } from '../config';
 
 // 设置axios的基础URL为后端服务器的地址
-const API_BASE_URL = '';
-
 export function useApi() {
   const uploadFile = async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();

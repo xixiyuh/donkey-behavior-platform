@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 from typing import List
 from ..models import Pen, Camera
 from ..schemas import Pen as PenSchema, Camera as CameraSchema
@@ -7,7 +7,7 @@ router = APIRouter(tags=["routes"])
 
 # 获取指定养殖舍的所有栏
 @router.get("/barns/{barn_id}/pens", response_model=List[PenSchema])
-def get_pens_by_barn(barn_id: int):
+def get_pens_by_barn(barn_id: int = Path(..., ge=1)):
     pens = Pen.get_by_barn(barn_id)
     return [{
         "id": pen["id"],
@@ -18,7 +18,7 @@ def get_pens_by_barn(barn_id: int):
 
 # 获取指定栏的所有摄像头
 @router.get("/pens/{pen_id}/cameras", response_model=List[CameraSchema])
-def get_cameras_by_pen(pen_id: int):
+def get_cameras_by_pen(pen_id: int = Path(..., ge=1)):
     cameras = Camera.get_by_pen(pen_id)
     return [{
         "id": camera["id"],

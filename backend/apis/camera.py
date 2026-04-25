@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 from typing import List
 import pymysql
 from ..models import Camera
@@ -27,7 +27,7 @@ def create_camera(camera: CameraCreate):
         raise HTTPException(status_code=400, detail="创建摄像头失败")
 
 @router.get("")
-def get_cameras(page: int = 1, page_size: int = 10):
+def get_cameras(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
     result = Camera.get_all(page, page_size)
     return {
         "items": [{
@@ -44,7 +44,7 @@ def get_cameras(page: int = 1, page_size: int = 10):
     }
 
 @router.get("/{camera_id}", response_model=CameraSchema)
-def get_camera(camera_id: int):
+def get_camera(camera_id: int = Path(..., ge=1)):
     camera = Camera.get_by_id(camera_id)
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -58,7 +58,7 @@ def get_camera(camera_id: int):
     }
 
 @router.put("/{camera_id}", response_model=CameraSchema)
-def update_camera(camera_id: int, camera: CameraUpdate):
+def update_camera(camera: CameraUpdate, camera_id: int = Path(..., ge=1)):
     existing_camera = Camera.get_by_id(camera_id)
     if not existing_camera:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -88,7 +88,7 @@ def update_camera(camera_id: int, camera: CameraUpdate):
     }
 
 @router.get("/pens/{pen_id}/cameras", response_model=List[CameraSchema])
-def get_cameras_by_pen(pen_id: int):
+def get_cameras_by_pen(pen_id: int = Path(..., ge=1)):
     cameras = Camera.get_by_pen(pen_id)
     return [{
         "id": camera["id"],
@@ -100,7 +100,7 @@ def get_cameras_by_pen(pen_id: int):
     } for camera in cameras]
 
 @router.get("/barns/{barn_id}/cameras", response_model=List[CameraSchema])
-def get_cameras_by_barn(barn_id: int):
+def get_cameras_by_barn(barn_id: int = Path(..., ge=1)):
     cameras = Camera.get_by_barn(barn_id)
     return [{
         "id": camera["id"],
@@ -112,7 +112,7 @@ def get_cameras_by_barn(barn_id: int):
     } for camera in cameras]
 
 @router.delete("/{camera_id}")
-def delete_camera(camera_id: int):
+def delete_camera(camera_id: int = Path(..., ge=1)):
     existing_camera = Camera.get_by_id(camera_id)
     if not existing_camera:
         raise HTTPException(status_code=404, detail="Camera not found")

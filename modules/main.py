@@ -1,6 +1,6 @@
 # modules/main.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -25,6 +25,7 @@ def get_timestamp():
     return datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
 
 import modules.config as C
+from backend.config import settings
 from .detector_pt import PTDetector
 from .streams import open_source
 from .websocket_manager import WSManager
@@ -161,7 +162,7 @@ app = FastAPI(title="Realtime Detector", version="1.0.0", lifespan=lifespan)
 # 配置CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -484,7 +485,7 @@ def cleanup_uploaded_files():
     print(f"{get_timestamp()} [Scheduler] Starting upload files cleanup")
     
     try:
-        upload_dir = C.BASE_DIR / "uploads"
+        upload_dir = settings.upload_dir
         if not upload_dir.exists():
             print(f"{get_timestamp()} [Scheduler] Upload directory not found")
             return
@@ -593,45 +594,156 @@ async def get_session_statistics():
 
 from fastapi import UploadFile, File
 import os
+from pathlib import Path
+import uuid
 
 import aiofiles
 
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+IMAGE_MAX_UPLOAD_SIZE = settings.image_max_upload_size
+VIDEO_MAX_UPLOAD_SIZE = settings.video_max_upload_size
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
+ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+ALLOWED_UPLOAD_MIME_TYPES = {
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".png": {"image/png"},
+    ".mp4": {"video/mp4"},
+    ".avi": {"video/x-msvideo", "video/avi", "video/msvideo"},
+    ".mov": {"video/quicktime"},
+    ".mkv": {"video/x-matroska", "video/matroska"},
+}
+
+
+def _upload_error(message: str, status_code: int = 400):
+    return JSONResponse(
+        status_code=status_code,
+        content={"success": False, "message": message},
+    )
+
+
+def _get_upload_size_limit(suffix: str) -> int:
+    if suffix in ALLOWED_IMAGE_EXTENSIONS:
+        return IMAGE_MAX_UPLOAD_SIZE
+    return VIDEO_MAX_UPLOAD_SIZE
+
+
+def _validate_upload_filename(filename: str) -> tuple[str, str]:
+    if not filename or not filename.strip():
+        raise ValueError("Empty filename is not allowed")
+
+    original_path = Path(filename)
+    if original_path.is_absolute() or original_path.name != filename:
+        raise ValueError("Invalid filename")
+
+    suffix = original_path.suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise ValueError("Unsupported file type")
+
+    return original_path.name, suffix
+
+
+def _resolve_upload_target(upload_dir: Path, filename: str) -> Path:
+    upload_root = upload_dir.resolve()
+    target_path = (upload_dir / filename).resolve()
+    target_path.relative_to(upload_root)
+    return target_path
+
+
+def _resolve_deletable_upload_path(upload_dir: Path, filename: str) -> Path:
+    if not filename or not filename.strip():
+        raise ValueError("Empty filename is not allowed")
+
+    raw_path = Path(filename)
+    if raw_path.is_absolute() or ".." in raw_path.parts:
+        raise ValueError("Invalid file path")
+
+    if raw_path.parts and raw_path.parts[0] == "uploads":
+        raw_path = Path(*raw_path.parts[1:])
+
+    if not raw_path.parts or len(raw_path.parts) != 1:
+        raise ValueError("Invalid file path")
+
+    return _resolve_upload_target(upload_dir, raw_path.name)
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    saved_path = None
     try:
         # 确保上传目录存在
-        upload_dir = C.BASE_DIR / "uploads"
+        upload_dir = settings.upload_dir
         upload_dir.mkdir(exist_ok=True)
+
+        original_filename, suffix = _validate_upload_filename(file.filename or "")
+        content_type = (file.content_type or "").lower()
+        allowed_mime_types = ALLOWED_UPLOAD_MIME_TYPES.get(suffix, set())
+        if content_type and content_type not in allowed_mime_types:
+            return _upload_error("Unsupported file MIME type")
+
+        safe_filename = f"{uuid.uuid4().hex}{suffix}"
+        file_path = _resolve_upload_target(upload_dir, safe_filename)
+        max_size = _get_upload_size_limit(suffix)
+
+        total_size = 0
+        saved_path = file_path
         
         # 保存文件（使用异步I/O）
-        file_path = upload_dir / file.filename
-        content = await file.read()
         async with aiofiles.open(file_path, "wb") as f:
-            await f.write(content)
-        
-        return {"success": True, "file_path": str(file_path)}
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+                if total_size > max_size:
+                    await f.close()
+                    if file_path.exists():
+                        file_path.unlink()
+                    return _upload_error("Uploaded file is too large", status_code=413)
+
+                await f.write(chunk)
+
+        relative_file_path = f"uploads/{safe_filename}"
+        return {
+            "success": True,
+            "file_path": relative_file_path,
+            "filename": safe_filename,
+            "original_filename": original_filename,
+        }
+    except ValueError as e:
+        return _upload_error(str(e))
     except Exception as e:
+        if saved_path and saved_path.exists():
+            try:
+                saved_path.unlink()
+            except Exception:
+                pass
         return {"success": False, "message": str(e)}
+    finally:
+        try:
+            await file.close()
+        except Exception:
+            pass
 
 
-@app.delete("/upload/{filename}")
+@app.delete("/upload/{filename:path}")
 async def delete_uploaded_file(filename: str):
     """删除已上传的文件"""
     try:
-        upload_dir = C.BASE_DIR / "uploads"
-        file_path = upload_dir / filename
+        upload_dir = settings.upload_dir
+        file_path = _resolve_deletable_upload_path(upload_dir, filename)
         
         # 安全检查：确保文件路径在uploads目录内
-        try:
-            file_path.resolve().relative_to(upload_dir.resolve())
-        except ValueError:
+        if not file_path.exists():
+            return {"success": False, "message": "File not found"}
+        if not file_path.is_file():
             return {"success": False, "message": "Invalid file path"}
-        
-        if file_path.exists():
-            file_path.unlink()
-            return {"success": True, "message": f"File {filename} deleted successfully"}
-        else:
-            return {"success": False, "message": f"File {filename} not found"}
+
+        file_path.unlink()
+        return {"success": True, "message": "File deleted successfully"}
+    except ValueError as e:
+        return {"success": False, "message": str(e)}
     except Exception as e:
         return {"success": False, "message": str(e)}
 

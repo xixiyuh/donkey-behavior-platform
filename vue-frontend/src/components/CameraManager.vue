@@ -136,6 +136,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { useBarnStore } from '../stores/barn';
 import { usePenStore } from '../stores/pen';
 import { useCameraStore } from '../stores/camera';
+import { STREAM_URL_ERROR_MESSAGE, isValidStreamUrl, normalizeStreamUrl } from '../utils/streamUrl';
 import type { Pen, Camera } from '../types';
 
 const barnStore = useBarnStore();
@@ -255,12 +256,18 @@ const createCamera = async () => {
     return;
   }
 
+  const flvUrl = normalizeStreamUrl(cameraForm.value.flv_url);
+  if (!isValidStreamUrl(flvUrl)) {
+    alert(STREAM_URL_ERROR_MESSAGE);
+    return;
+  }
+
   try {
     await cameraStore.createCamera({
       camera_id: cameraForm.value.camera_id,
       pen_id: parseInt(cameraForm.value.pen_id.toString()),
       barn_id: parseInt(cameraForm.value.barn_id.toString()),
-      flv_url: cameraForm.value.flv_url,
+      flv_url: flvUrl,
     });
 
     // 只重置摄像头标识和FLV地址，保持养殖舍和栏选择
@@ -305,10 +312,17 @@ const saveEdit = async (cameraId: number) => {
     return;
   }
 
+  const flvUrl = normalizeStreamUrl(editingFlvUrl.value);
+  if (!isValidStreamUrl(flvUrl)) {
+    alert(STREAM_URL_ERROR_MESSAGE);
+    return;
+  }
+
   try {
     await cameraStore.updateCamera(cameraId, {
-      flv_url: editingFlvUrl.value,
+      flv_url: flvUrl,
     });
+    await loadCameras(currentPage.value);
     cancelEdit();
   } catch (err: any) {
     cameraStore.error = err.response?.data?.detail || '更新摄像头失败';

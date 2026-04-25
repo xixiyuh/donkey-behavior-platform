@@ -57,6 +57,8 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!vue-frontend/.env.local.example
+!vue-frontend/.env.production.example
 
 # ===== OS / Editor =====
 .vscode/

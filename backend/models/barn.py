@@ -49,8 +49,8 @@ class Barn:
                 pen_ids = [pen['id'] for pen in cursor.fetchall()]
 
                 if pen_ids:
-                    placeholders = ','.join(['%s'] * len(pen_ids))
-                    cursor.execute(f'DELETE FROM cameras WHERE pen_id IN ({placeholders})', pen_ids)
+                    for pen_id in pen_ids:
+                        cursor.execute('DELETE FROM cameras WHERE pen_id = %s', (pen_id,))
 
                 cursor.execute('DELETE FROM pens WHERE barn_id = %s', (barn_id,))
                 cursor.execute('DELETE FROM barns WHERE id = %s', (barn_id,))

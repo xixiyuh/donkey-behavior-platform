@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import type { Barn } from '../types';
+import { API_BASE_URL } from '../config';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = '';
+axios.defaults.baseURL = API_BASE_URL;
 
 export const useBarnStore = defineStore('barn', {
   state: () => ({

@@ -49,6 +49,8 @@ export interface WebSocketMessage {
 export interface UploadResponse {
   success: boolean;
   file_path?: string;
+  filename?: string;
+  original_filename?: string;
   message?: string;
 }
 

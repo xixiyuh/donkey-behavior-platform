@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path, Query
 import pymysql
 from ..models import Barn
 from ..schemas import Barn as BarnSchema, BarnCreate, BarnUpdate
@@ -24,7 +24,7 @@ def create_barn(barn: BarnCreate):
         raise HTTPException(status_code=400, detail="创建养殖舍失败")
 
 @router.get("")
-def get_barns(page: int = 1, page_size: int = 10):
+def get_barns(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
     result = Barn.get_all(page, page_size)
     return {
         "items": [{
@@ -39,7 +39,7 @@ def get_barns(page: int = 1, page_size: int = 10):
     }
 
 @router.get("/{barn_id}", response_model=BarnSchema)
-def get_barn(barn_id: int):
+def get_barn(barn_id: int = Path(..., ge=1)):
     barn = Barn.get_by_id(barn_id)
     if not barn:
         raise HTTPException(status_code=404, detail="Barn not found")
@@ -51,7 +51,7 @@ def get_barn(barn_id: int):
     }
 
 @router.put("/{barn_id}", response_model=BarnSchema)
-def update_barn(barn_id: int, barn: BarnUpdate):
+def update_barn(barn: BarnUpdate, barn_id: int = Path(..., ge=1)):
     existing_barn = Barn.get_by_id(barn_id)
     if not existing_barn:
         raise HTTPException(status_code=404, detail="Barn not found")
@@ -65,7 +65,7 @@ def update_barn(barn_id: int, barn: BarnUpdate):
     }
 
 @router.delete("/{barn_id}")
-def delete_barn(barn_id: int):
+def delete_barn(barn_id: int = Path(..., ge=1)):
     existing_barn = Barn.get_by_id(barn_id)
     if not existing_barn:
         raise HTTPException(status_code=404, detail="Barn not found")

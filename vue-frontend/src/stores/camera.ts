@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 import type { Camera, CameraConfig } from '../types';
+import { API_BASE_URL } from '../config';
 
 // 设置axios的基础URL为后端服务器的地址
-axios.defaults.baseURL = '';
+axios.defaults.baseURL = API_BASE_URL;
 
 export const useCameraStore = defineStore('camera', {
   state: () => ({
@@ -38,7 +39,7 @@ export const useCameraStore = defineStore('camera', {
       }
     },
 
-    async fetchAllCameras(pageSize: number = 1000) {
+    async fetchAllCameras(pageSize: number = 100) {
       this.loading = true;
       this.error = null;
       try {

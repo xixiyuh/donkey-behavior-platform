@@ -1,4 +1,5 @@
 from pathlib import Path
+from backend.config import settings
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
@@ -67,3 +68,7 @@ UPLOAD_FILE_RETENTION_HOURS = 0  # 文件保留24小时（超过这个时间的�
 EVENT_RETENTION_MONTHS = 3
 EVENT_RETENTION_CLEANUP_HOUR = 2
 EVENT_RETENTION_CLEANUP_MINUTE = 0
+
+# Environment overrides
+DEBUG = settings.debug
+LOG_LEVEL = settings.log_level

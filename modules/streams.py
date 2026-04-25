@@ -305,18 +305,26 @@ def _resolve_camera_meta_from_db(value: str):
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        table_queries = {
+            "camera_configs": "SELECT camera_id, pen_id, barn_id, flv_url FROM camera_configs WHERE flv_url = %s ORDER BY id DESC LIMIT 1",
+            "cameras": "SELECT camera_id, pen_id, barn_id, flv_url FROM cameras WHERE flv_url = %s ORDER BY id DESC LIMIT 1",
+        }
         for table in ("camera_configs", "cameras"):
             cursor.execute(
-                f"SELECT camera_id, pen_id, barn_id, flv_url FROM {table} WHERE flv_url = ? ORDER BY id DESC LIMIT 1",
+                table_queries[table],
                 (value,),
             )
             row = cursor.fetchone()
             if row:
                 return row["flv_url"], row["camera_id"], row["pen_id"], row["barn_id"]
 
+        camera_id_queries = {
+            "camera_configs": "SELECT camera_id, pen_id, barn_id, flv_url FROM camera_configs WHERE camera_id = %s ORDER BY id DESC LIMIT 1",
+            "cameras": "SELECT camera_id, pen_id, barn_id, flv_url FROM cameras WHERE camera_id = %s ORDER BY id DESC LIMIT 1",
+        }
         for table in ("camera_configs", "cameras"):
             cursor.execute(
-                f"SELECT camera_id, pen_id, barn_id, flv_url FROM {table} WHERE camera_id = ? ORDER BY id DESC LIMIT 1",
+                camera_id_queries[table],
                 (value,),
             )
             row = cursor.fetchone()
