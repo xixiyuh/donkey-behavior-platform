@@ -170,22 +170,19 @@ class MatingDetector:
             print(f"[DETECTION]   - {d['class']} (conf: {d['confidence']:.2f}, track_id: {d.get('track_id')})")
         
         # 过滤出standing类型的检测结果
-        mating_detections = [d for d in detections if d['class'] == 'mating' and d['confidence'] > MATING_CONF_THRES]
-        print(f"[DETECTION] Filtered mating detections: {len(mating_detections)} (confidence threshold: {MATING_CONF_THRES})")
+        standing_detections = [d for d in detections if d['class'] == 'standing' and d['confidence'] > MATING_CONF_THRES]
+        print(f"[DETECTION] Filtered standing detections: {len(standing_detections)} (confidence threshold: {MATING_CONF_THRES})")
         
         # 检查是否有standing事件
-        # Create or update mating events when matching detections exist
-        if mating_detections:
+        if standing_detections:
             # 为每个standing检测结果创建或更新事件
-            # Process each mating detection independently
-            for detection in mating_detections:
+            for detection in standing_detections:
                 # 使用track_id来区分不同的standing事件，如果没有track_id则使用时间戳
                 track_id = detection.get('track_id')
                 print(f"Processing detection with track_id: {track_id}")
                 
                 # 构建事件键，包含track_id以区分不同的standing事件
                 # 如果没有track_id，使用检测框位置作为临时标识
-                # Build an event key so separate tracks become separate events
                 camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id and camera_id != "-1" else 'local'
                 
                 if track_id is not None:
@@ -201,7 +198,6 @@ class MatingDetector:
                 print(f"Event key: {event_key}")
                 
                 if event_key not in self.current_mating_events:
-                    # Start a new mating event
                     # 开始新的standing事件
                     print(f"Starting new event: {event_key}")
                     # 计算中心点
@@ -224,7 +220,6 @@ class MatingDetector:
                     self.save_screenshot(frame, detection, event_key, 0)
                     
                 else:
-                    # Update the existing mating event
                     # 更新现有的standing事件
                     event = self.current_mating_events[event_key]
                     event['detections'].append(detection)
@@ -243,7 +238,6 @@ class MatingDetector:
                         # 保存新的截图，替换旧的
                         self.save_screenshot(frame, detection, event_key, 0)
         else:
-            # No mating detections in this frame; check whether stale events should end
             # 没有standing检测结果，检查是否有正在进行的standing事件需要结束
             # 构建基础事件键前缀
             camera_key = camera_id.split('/')[-1].split('?')[0] if camera_id else 'unknown'
