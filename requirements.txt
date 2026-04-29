@@ -7,14 +7,13 @@ python-dotenv
 
 # 数据库
 pymysql
+cryptography
 
 # 图像处理和计算机视觉
 opencv-python-headless
 numpy
 Pillow
 
-# 模型和推理
-ultralytics
 
 # WebSocket和文件处理
 websockets

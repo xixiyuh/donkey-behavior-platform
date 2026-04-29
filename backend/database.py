@@ -25,7 +25,7 @@ def init_db():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS barns (
         id INTEGER PRIMARY KEY AUTO_INCREMENT,
-        name TEXT NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL UNIQUE,
         total_pens INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -44,7 +44,7 @@ def init_db():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS cameras (
         id INTEGER PRIMARY KEY AUTO_INCREMENT,
-        camera_id TEXT NOT NULL UNIQUE,
+        camera_id VARCHAR(50) NOT NULL UNIQUE,
         pen_id INTEGER NOT NULL,
         barn_id INTEGER NOT NULL,
         flv_url TEXT NOT NULL,

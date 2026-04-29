@@ -955,7 +955,13 @@ async def ws_endpoint(
         print(f"{get_timestamp()} [WS] DECODED value = {value}", flush=True)
 
         # 生成唯一的 source key
-        source_key = SourceKey(kind=kind, value=value, camera_id=camera_id)
+        source_key = SourceKey(
+            kind=kind,
+            value=value,
+            camera_id=camera_id,
+            pen_id=pen_id,
+            barn_id=barn_id,
+        )
         print(f"{get_timestamp()} [WS] Source key: {source_key}", flush=True)
 
         # 在线程池中创建 stream 和 detector（阻塞操作）

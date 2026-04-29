@@ -548,6 +548,15 @@ class SourceSessionManager:
             if source_key in self._sessions:
                 # 重用现有 session
                 session = self._sessions[source_key]
+                if source_key.camera_id:
+                    session.metadata['camera_id'] = source_key.camera_id
+                    session.stream.camera_id = source_key.camera_id
+                if source_key.pen_id is not None:
+                    session.metadata['pen_id'] = source_key.pen_id
+                    session.stream.pen_id = source_key.pen_id
+                if source_key.barn_id is not None:
+                    session.metadata['barn_id'] = source_key.barn_id
+                    session.stream.barn_id = source_key.barn_id
                 inf(f"[SESSION-REUSE] source_key={source_key} session_id={id(session)} ref_count={session.ref_count}")
                 return session
             else:

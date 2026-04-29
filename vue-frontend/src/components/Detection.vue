@@ -341,6 +341,8 @@ const startWithFile = (filePath: string) => {
 // 启动函数
 const start = () => {
   let value = '';
+  let effectivePenId: number | undefined;
+  let effectiveBarnId: number | undefined;
   let cameraId = ''; // 摄像头的真实ID
 
   // 如果选择了摄像头,则使用摄像头的FLV地址
@@ -349,6 +351,8 @@ const start = () => {
 
     // 从摄像头列表中找到对应的camera对象,获取真实的camera_id
     const selectedCameraObj = cameras.value.find(cam => cam.flv_url === value);
+    effectivePenId = selectedCameraObj?.pen_id ?? (selectedPen.value ? Number(selectedPen.value) : undefined);
+    effectiveBarnId = selectedCameraObj?.barn_id ?? (selectedBarn.value ? Number(selectedBarn.value) : undefined);
     cameraId = selectedCameraObj?.camera_id || value; // 优先使用真实camera_id,否则使用URL
 
     kind.value = 'flv'; // 使用FLV格式，与后台检测共享同一套pipeline
@@ -371,7 +375,7 @@ const start = () => {
 
   log(`正在连接: ${kind.value} - ${value}`, 'info');
   isLoading.value = true;
-  connect(kind.value, value, cameraId, selectedPen.value ? Number(selectedPen.value) : undefined, selectedBarn.value ? Number(selectedBarn.value) : undefined);
+  connect(kind.value, value, cameraId, effectivePenId, effectiveBarnId);
   // 假设连接成功后会设置isConnected为true,我们监听这个变化来关闭加载状态
   setTimeout(() => {
     if (!isConnected.value) {
